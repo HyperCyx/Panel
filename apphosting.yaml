@@ -1,0 +1,8 @@
+version: 1
+
+# Environment variables can be defined here
+env:
+  - variable: MONGODB_URI
+    secret: mongodb-uri
+  - variable: JWT_SECRET
+    secret: jwt-secret
