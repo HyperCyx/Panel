@@ -133,6 +133,7 @@ export function AppearanceTab() {
     const { toast } = useToast();
     const router = useRouter();
     const [siteName, setSiteName] = useState('');
+    const [siteVersion, setSiteVersion] = useState('');
     const [footerText, setFooterText] = useState('');
     const [colors, setColors] = useState<ColorSettings>({});
     const [isLoading, setIsLoading] = useState(true);
@@ -146,6 +147,7 @@ export function AppearanceTab() {
                     toast({ variant: 'destructive', title: 'Error fetching settings', description: result.error });
                 } else {
                     setSiteName(result.siteName || '');
+                    setSiteVersion(result.siteVersion || '3.0.1');
                     setFooterText(result.footerText || '');
                     const loadedColors: ColorSettings = {};
                     for (const key of allColorKeys) {
@@ -170,7 +172,7 @@ export function AppearanceTab() {
     const handleSave = async () => {
         setIsLoading(true);
         try {
-            const settingsToUpdate = { siteName, footerText, ...colors };
+            const settingsToUpdate = { siteName, siteVersion, footerText, ...colors };
             
             const result = await updateAdminSettings(settingsToUpdate);
             
@@ -203,6 +205,19 @@ export function AppearanceTab() {
                             onChange={(e) => setSiteName(e.target.value)}
                             disabled={isLoading}
                         />
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="site-version">Version</Label>
+                        <Input
+                            id="site-version"
+                            placeholder="e.g., 3.0.1"
+                            value={siteVersion}
+                            onChange={(e) => setSiteVersion(e.target.value)}
+                            disabled={isLoading}
+                        />
+                        <p className="text-sm text-muted-foreground">
+                            Version code displayed in the footer. Use <code>{'{VERSION}'}</code> placeholder in footer text.
+                        </p>
                     </div>
                     <div className="space-y-2">
                         <Label htmlFor="footer-text">Footer Text</Label>

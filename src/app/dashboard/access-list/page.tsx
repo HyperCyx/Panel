@@ -1,10 +1,10 @@
 import { getCurrentUser, getPublicSettings } from '@/app/actions';
-import { GetNumber } from '@/components/get-number';
-import { Smartphone } from 'lucide-react';
+import { AccessList } from '@/components/access-list';
+import { Wifi } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
 
-export default async function GetNumberPage() {
+export default async function AccessListPage() {
   const [user, settings] = await Promise.all([
     getCurrentUser(),
     getPublicSettings(),
@@ -14,10 +14,10 @@ export default async function GetNumberPage() {
   return (
     <div className="space-y-4">
       <h2 className="flex items-center gap-2.5 text-sm font-bold text-primary uppercase tracking-widest">
-        <Smartphone className="h-4 w-4" />
-        Get Number
+        <Wifi className="h-4 w-4" />
+        Access List
       </h2>
-      <GetNumber userId={user.id} currency={settings.currency || '৳'} otpRate={user.otpRate ?? 0.50} otpCheckInterval={settings.otpCheckInterval ?? 5} />
+      <AccessList defaultOrigins={settings.defaultOrigins ?? []} />
     </div>
   );
 }

@@ -1,15 +1,20 @@
-import { fetchSmsData } from '@/app/actions';
+import { fetchSmsData, getPublicSettings } from '@/app/actions';
 import { SmsInspector } from '@/components/sms-inspector';
-import { startOfDay, endOfDay, subDays } from 'date-fns';
+import { subHours } from 'date-fns';
 import { Code } from 'lucide-react';
 
+export const dynamic = 'force-dynamic';
+
 export default async function ConsolePage() {
-  const smsResult = await fetchSmsData({
-    startDate: startOfDay(subDays(new Date(), 1)),
-    endDate: endOfDay(new Date()),
-    senderId: '',
-    phone: '',
-  });
+  const [smsResult, settings] = await Promise.all([
+    fetchSmsData({
+      startDate: subHours(new Date(), 24),
+      endDate: new Date(),
+      senderId: '',
+      phone: '',
+    }),
+    getPublicSettings(),
+  ]);
 
   return (
     <div className="space-y-4">
@@ -17,7 +22,11 @@ export default async function ConsolePage() {
         <Code className="h-4 w-4" />
         Console
       </h2>
-      <SmsInspector initialRecords={smsResult.data ?? []} initialError={smsResult.error} />
+      <SmsInspector
+        initialRecords={smsResult.data ?? []}
+        initialError={smsResult.error}
+        refreshInterval={settings.consoleRefreshInterval ?? 60}
+      />
     </div>
   );
 }

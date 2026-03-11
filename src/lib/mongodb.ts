@@ -34,7 +34,6 @@ const defaultSettings: { [key: string]: any } = {
     emailChangeEnabled: true,
     signupEnabled: true,
     footerText: '© {YEAR} {SITENAME}. All rights reserved.',
-    numberList: [],
     errorMappings: [],
     // Theme Colors
     colorPrimary: '217.2 91.2% 59.8%',

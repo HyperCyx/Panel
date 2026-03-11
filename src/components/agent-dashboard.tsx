@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Menu, X, Users, UserCheck, LogOut, Globe, LayoutDashboard,
-  RefreshCcw, Loader2, CheckCircle, XCircle, Wallet, CreditCard, Save, ChevronDown,
+  RefreshCcw, Loader2, CheckCircle, XCircle, Wallet, CreditCard, Save, ChevronDown, BellRing, Bell, CheckCheck, Clock, BellOff,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,9 +13,10 @@ import { useToast } from '@/hooks/use-toast';
 import {
   logout, getPendingUsers, getAgentAllUsers, approveUser, rejectUser,
   getAgentStats, createAgentWithdrawal,
-  getUserWallets, saveUserWallets,
+  getUserWallets, saveUserWallets, getPublicSettings,
+  getNotifications, markNotificationAsRead, markAllNotificationsAsRead,
 } from '@/app/actions';
-import type { UserProfile, UserWalletInfo } from '@/lib/types';
+import type { UserProfile, UserWalletInfo, PaymentMethod } from '@/lib/types';
 import { useSettings } from '@/contexts/settings-provider';
 
 const AGENT_NAV = [
@@ -23,13 +24,7 @@ const AGENT_NAV = [
   { id: 'pending',   label: 'Pending Approvals', icon: UserCheck },
   { id: 'all',       label: 'All Users',         icon: Users },
   { id: 'withdraw',  label: 'Withdraw',          icon: CreditCard },
-];
-
-const WALLET_TYPES = [
-  { key: 'bkash' as const, label: 'bKash', placeholder: '01XXXXXXXXX' },
-  { key: 'nagad' as const, label: 'Nagad', placeholder: '01XXXXXXXXX' },
-  { key: 'rocket' as const, label: 'Rocket', placeholder: '01XXXXXXXXX' },
-  { key: 'binance' as const, label: 'Binance (Pay ID / TRC20)', placeholder: 'Address / ID' },
+  { id: 'notifications', label: 'Notifications', icon: BellRing },
 ];
 
 interface AgentStatsData {
@@ -55,18 +50,24 @@ export function AgentDashboard({ user }: { user: UserProfile }) {
   const [withdrawAmount, setWithdrawAmount] = useState('');
   const [withdrawing, setWithdrawing] = useState(false);
   // Wallet state
-  const [wallets, setWallets] = useState<UserWalletInfo>({ bkash: '', nagad: '', rocket: '', binance: '' });
+  const [wallets, setWallets] = useState<UserWalletInfo>({});
   const [loadingWallets, setLoadingWallets] = useState(true);
   const [savingWallets, setSavingWallets] = useState(false);
   const [selectedWallet, setSelectedWallet] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
+  // Notification state
+  const [agentNotifications, setAgentNotifications] = useState<{ id: string; title: string; message: string; isRead: boolean; createdAt: string }[]>([]);
+  const [loadingNotifications, setLoadingNotifications] = useState(true);
+  const [markingAllRead, setMarkingAllRead] = useState(false);
   const logoutFormRef = useRef<HTMLFormElement>(null);
   const { toast } = useToast();
-  const { siteName, footerText, currency } = useSettings();
+  const { siteName, footerText, currency, siteVersion } = useSettings();
 
   const processedFooter = (footerText || '')
     .replace('{YEAR}', new Date().getFullYear().toString())
-    .replace('{SITENAME}', siteName);
+    .replace('{SITENAME}', siteName)
+    .replace('{VERSION}', siteVersion || '');
 
   const fetchPending = async () => {
     setLoadingPending(true);
@@ -92,10 +93,24 @@ export function AgentDashboard({ user }: { user: UserProfile }) {
   const fetchWallets = useCallback(async () => {
     setLoadingWallets(true);
     try {
-      const result = await getUserWallets();
-      if (result.data) setWallets(result.data);
+      const [walletResult, settingsResult] = await Promise.all([
+        getUserWallets(),
+        getPublicSettings(),
+      ]);
+      if (walletResult.data) setWallets(walletResult.data);
+      setPaymentMethods(settingsResult.paymentMethods ?? []);
     } catch { /* silent */ } finally {
       setLoadingWallets(false);
+    }
+  }, []);
+
+  const fetchAgentNotifications = useCallback(async () => {
+    setLoadingNotifications(true);
+    try {
+      const result = await getNotifications();
+      if (result.data) setAgentNotifications(result.data);
+    } catch { /* silent */ } finally {
+      setLoadingNotifications(false);
     }
   }, []);
 
@@ -104,7 +119,8 @@ export function AgentDashboard({ user }: { user: UserProfile }) {
     fetchAll();
     fetchStats();
     fetchWallets();
-  }, [fetchWallets]);
+    fetchAgentNotifications();
+  }, [fetchWallets, fetchAgentNotifications]);
 
   const handleApprove = async (userId: string) => {
     setActionId(userId);
@@ -145,9 +161,10 @@ export function AgentDashboard({ user }: { user: UserProfile }) {
     setSavingWallets(false);
   };
 
-  const availableWallets = WALLET_TYPES.filter(w => wallets[w.key]?.trim());
-  const selectedWalletInfo = WALLET_TYPES.find(w => w.key === selectedWallet);
-  const selectedWalletAddress = selectedWallet ? wallets[selectedWallet as keyof UserWalletInfo] : '';
+  const enabledMethods = paymentMethods.filter(m => m.enabled);
+  const availableWallets = enabledMethods.filter(m => wallets[m.id]?.trim());
+  const selectedWalletInfo = enabledMethods.find(m => m.id === selectedWallet);
+  const selectedWalletAddress = selectedWallet ? wallets[selectedWallet] : '';
 
   const handleWithdraw = async () => {
     const amount = parseFloat(withdrawAmount);
@@ -160,7 +177,7 @@ export function AgentDashboard({ user }: { user: UserProfile }) {
       return;
     }
     setWithdrawing(true);
-    const result = await createAgentWithdrawal(amount, selectedWalletAddress, selectedWalletInfo?.label || selectedWallet);
+    const result = await createAgentWithdrawal(amount, selectedWalletAddress, selectedWalletInfo?.name || selectedWallet);
     if (result.success) {
       toast({ title: 'Withdrawal Requested', description: `${currency}${amount} withdrawal submitted.` });
       setWithdrawAmount('');
@@ -525,13 +542,14 @@ export function AgentDashboard({ user }: { user: UserProfile }) {
                   <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
                 ) : (
                   <div className="space-y-3">
-                    {WALLET_TYPES.map(w => (
-                      <div key={w.key}>
-                        <label className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-1 block">{w.label}</label>
+                    {enabledMethods.map(m => (
+                      <div key={m.id}>
+                        <label className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-1 block">{m.name}</label>
                         <Input
-                          value={wallets[w.key]}
-                          onChange={(e) => setWallets(prev => ({ ...prev, [w.key]: e.target.value }))}
-                          placeholder={w.placeholder}
+                          type={m.fieldType === 'number' ? 'tel' : 'text'}
+                          value={wallets[m.id] || ''}
+                          onChange={(e) => setWallets(prev => ({ ...prev, [m.id]: e.target.value }))}
+                          placeholder={m.placeholder}
                         />
                       </div>
                     ))}
@@ -565,22 +583,22 @@ export function AgentDashboard({ user }: { user: UserProfile }) {
                         onClick={() => setShowDropdown(!showDropdown)}
                         className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl border border-border bg-muted text-sm text-foreground"
                       >
-                        <span>{selectedWalletInfo ? `${selectedWalletInfo.label}: ${selectedWalletAddress}` : 'Choose a wallet...'}</span>
+                        <span>{selectedWalletInfo ? `${selectedWalletInfo.name}: ${selectedWalletAddress}` : 'Choose a wallet...'}</span>
                         <ChevronDown className="h-4 w-4 text-muted-foreground" />
                       </button>
                       {showDropdown && (
                         <div className="absolute z-10 mt-1 w-full bg-card border border-border rounded-xl shadow-lg overflow-hidden">
-                          {availableWallets.map(w => (
+                          {availableWallets.map(m => (
                             <button
-                              key={w.key}
+                              key={m.id}
                               type="button"
-                              onClick={() => { setSelectedWallet(w.key); setShowDropdown(false); }}
+                              onClick={() => { setSelectedWallet(m.id); setShowDropdown(false); }}
                               className={`w-full text-left px-3 py-2.5 text-sm hover:bg-muted transition-colors ${
-                                selectedWallet === w.key ? 'bg-primary/10 text-primary font-medium' : 'text-foreground'
+                                selectedWallet === m.id ? 'bg-primary/10 text-primary font-medium' : 'text-foreground'
                               }`}
                             >
-                              <span className="font-medium">{w.label}</span>
-                              <span className="text-xs text-muted-foreground ml-2">{wallets[w.key]}</span>
+                              <span className="font-medium">{m.name}</span>
+                              <span className="text-xs text-muted-foreground ml-2">{wallets[m.id]}</span>
                             </button>
                           ))}
                         </div>
@@ -607,12 +625,92 @@ export function AgentDashboard({ user }: { user: UserProfile }) {
             </Card>
           </div>
         )}
+
+        {/* Notifications Tab */}
+        {activeTab === 'notifications' && (
+          <div className="space-y-5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Bell className="h-5 w-5 text-primary" />
+                <h3 className="text-base font-bold text-primary">Notifications</h3>
+                {agentNotifications.filter(n => !n.isRead).length > 0 && (
+                  <span className="bg-primary text-primary-foreground text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                    {agentNotifications.filter(n => !n.isRead).length}
+                  </span>
+                )}
+              </div>
+              {agentNotifications.filter(n => !n.isRead).length > 0 && (
+                <button
+                  onClick={async () => {
+                    setMarkingAllRead(true);
+                    const result = await markAllNotificationsAsRead();
+                    if (result.success) setAgentNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+                    setMarkingAllRead(false);
+                  }}
+                  disabled={markingAllRead}
+                  className="flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 transition disabled:opacity-50"
+                >
+                  {markingAllRead ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCheck className="h-3.5 w-3.5" />}
+                  Mark all as read
+                </button>
+              )}
+            </div>
+
+            {loadingNotifications ? (
+              <div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
+            ) : agentNotifications.length === 0 ? (
+              <Card className="bg-card border-border">
+                <CardContent className="py-8 text-center">
+                  <BellOff className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+                  <p className="text-sm text-muted-foreground">No notifications yet</p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="space-y-2">
+                {agentNotifications.map((n) => (
+                  <div
+                    key={n.id}
+                    onClick={async () => {
+                      if (!n.isRead) {
+                        setAgentNotifications(prev => prev.map(x => x.id === n.id ? { ...x, isRead: true } : x));
+                        await markNotificationAsRead(n.id);
+                      }
+                    }}
+                    className={`bg-card border rounded-2xl p-4 transition-colors cursor-pointer ${
+                      n.isRead ? 'border-border/50 opacity-70' : 'border-primary/30 bg-primary/[0.03] shadow-sm'
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <Bell className={`h-4 w-4 mt-0.5 flex-shrink-0 ${n.isRead ? 'text-muted-foreground' : 'text-primary'}`} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <h4 className={`text-sm font-semibold ${n.isRead ? 'text-muted-foreground' : 'text-foreground'}`}>{n.title}</h4>
+                          {!n.isRead && <span className="w-2 h-2 rounded-full bg-primary flex-shrink-0" />}
+                        </div>
+                        <p className={`text-sm mt-1 whitespace-pre-wrap ${n.isRead ? 'text-muted-foreground/70' : 'text-muted-foreground'}`}>{n.message}</p>
+                        <div className="flex items-center gap-1 mt-2 text-[11px] text-muted-foreground">
+                          <Clock className="h-3 w-3" />
+                          {new Date(n.createdAt).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </main>
 
       {processedFooter && (
         <footer className="border-t border-border bg-background/80 lg:pl-72">
           <div className="px-4 py-4 max-w-7xl mx-auto text-center text-xs text-muted-foreground">
             {processedFooter}
+            {siteVersion && (
+              <span className="ml-2 text-[10px] font-semibold bg-primary/10 text-primary px-2 py-0.5 rounded-md">
+                v{siteVersion}
+              </span>
+            )}
           </div>
         </footer>
       )}

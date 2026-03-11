@@ -1,6 +1,8 @@
 import { getCurrentUser, getDashboardStats } from '@/app/actions';
 import { ProfileView } from '@/components/profile-view';
 
+export const dynamic = 'force-dynamic';
+
 export default async function ProfilePage() {
   const [user, statsResult] = await Promise.all([
     getCurrentUser(),

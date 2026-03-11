@@ -39,7 +39,7 @@ export default async function RootLayout({
           <style dangerouslySetInnerHTML={{ __html: generateThemeStyles() }} />
       </head>
       <body className="antialiased">
-        <SettingsProvider value={{ siteName: settings.siteName, footerText: settings.footerText || '', currency: settings.currency || '৳' }}>
+        <SettingsProvider value={{ siteName: settings.siteName, siteVersion: settings.siteVersion || '3.0.1', footerText: settings.footerText || '', currency: settings.currency || '৳' }}>
             <AuthProvider>
             {children}
             </AuthProvider>

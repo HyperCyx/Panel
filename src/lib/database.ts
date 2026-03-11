@@ -1,5 +1,5 @@
 import connectDB from './mongodb';
-import { User as UserModel, Setting as SettingModel, AllocatedNumber as AllocatedNumberModel, PaymentRequest as PaymentRequestModel, UserWallet as UserWalletModel } from './models';
+import { User as UserModel, Setting as SettingModel, AllocatedNumber as AllocatedNumberModel, PaymentRequest as PaymentRequestModel, UserWallet as UserWalletModel, Notification as NotificationModel } from './models';
 import bcrypt from 'bcryptjs';
 
 // User types
@@ -19,7 +19,7 @@ export interface User {
   approvedBy?: string;
   commissionRate: number;
   agentWalletBalance: number;
-  privateNumberList: string[];
+
   walletBalance: number;
   otpRate: number;
   createdAt: string;
@@ -40,7 +40,6 @@ export interface UserProfile {
   approvedBy?: string;
   commissionRate: number;
   agentWalletBalance: number;
-  privateNumberList: string[];
   walletBalance: number;
   otpRate: number;
 }
@@ -68,6 +67,29 @@ export const UserDB = {
     return users.map(u => this.parseUserProfile(u));
   },
 
+  async countAll(): Promise<number> {
+    await connectDB();
+    return UserModel.countDocuments({});
+  },
+
+  async countActive(): Promise<number> {
+    await connectDB();
+    return UserModel.countDocuments({ status: 'active' });
+  },
+
+  async countBlocked(): Promise<number> {
+    await connectDB();
+    return UserModel.countDocuments({ status: 'blocked' });
+  },
+
+  async sumWalletBalances(): Promise<number> {
+    await connectDB();
+    const result = await UserModel.aggregate([
+      { $group: { _id: null, total: { $sum: '$walletBalance' } } },
+    ]);
+    return result.length > 0 ? result[0].total : 0;
+  },
+
   // Create new user
   async create(userData: { email: string; password?: string; name: string; phone?: string; isAdmin?: boolean; isAgent?: boolean; agentEmail?: string; approvalStatus?: string; status?: string }): Promise<User> {
     await connectDB();
@@ -88,7 +110,6 @@ export const UserDB = {
       approvalStatus: userData.approvalStatus || 'approved',
       status: userData.status || 'active',
       provider: 'credentials',
-      privateNumberList: [],
     });
 
     return this.parseUser(user);
@@ -105,7 +126,6 @@ export const UserDB = {
     if (updates.phone !== undefined) updateData.phone = updates.phone;
     if (updates.status !== undefined) updateData.status = updates.status;
     if (updates.photoURL !== undefined) updateData.photoURL = updates.photoURL;
-    if (updates.privateNumberList !== undefined) updateData.privateNumberList = updates.privateNumberList;
     if (updates.walletBalance !== undefined) updateData.walletBalance = updates.walletBalance;
     if (updates.otpRate !== undefined) updateData.otpRate = updates.otpRate;
     if (updates.isAgent !== undefined) updateData.isAgent = updates.isAgent;
@@ -119,23 +139,26 @@ export const UserDB = {
     return user ? this.parseUser(user) : null;
   },
 
-  // Add private numbers to user
-  async addPrivateNumbers(id: string, numbers: string[]): Promise<string[]> {
+  // Atomic increment for wallet balances — safe under concurrent access
+  async incrementBalance(id: string, field: 'walletBalance' | 'agentWalletBalance', amount: number): Promise<User | null> {
     await connectDB();
-    
-    const user = await UserModel.findById(id);
-    if (!user) throw new Error('User not found');
+    const user = await UserModel.findByIdAndUpdate(
+      id,
+      { $inc: { [field]: amount } },
+      { new: true }
+    );
+    return user ? this.parseUser(user) : null;
+  },
 
-    const currentList = user.privateNumberList || [];
-    const currentSet = new Set(currentList);
-    const newNumbers = numbers.filter(n => !currentSet.has(n));
-    
-    if (newNumbers.length === 0) return currentList;
-
-    const updatedList = [...currentList, ...newNumbers];
-    await UserModel.findByIdAndUpdate(id, { privateNumberList: updatedList });
-    
-    return updatedList;
+  // Atomic deduct with minimum-balance guard — returns null if insufficient funds
+  async deductBalance(id: string, field: 'walletBalance' | 'agentWalletBalance', amount: number): Promise<User | null> {
+    await connectDB();
+    const user = await UserModel.findOneAndUpdate(
+      { _id: id, [field]: { $gte: amount } },
+      { $inc: { [field]: -amount } },
+      { new: true }
+    );
+    return user ? this.parseUser(user) : null;
   },
 
   // Compare password
@@ -162,7 +185,6 @@ export const UserDB = {
       approvedBy: doc.approvedBy,
       commissionRate: doc.commissionRate ?? 0,
       agentWalletBalance: doc.agentWalletBalance ?? 0,
-      privateNumberList: doc.privateNumberList || [],
       walletBalance: doc.walletBalance ?? 0,
       otpRate: doc.otpRate ?? 0.50,
       createdAt: doc.createdAt ? doc.createdAt.toISOString() : new Date().toISOString(),
@@ -186,7 +208,6 @@ export const UserDB = {
       approvedBy: doc.approvedBy,
       commissionRate: doc.commissionRate ?? 0,
       agentWalletBalance: doc.agentWalletBalance ?? 0,
-      privateNumberList: doc.privateNumberList || [],
       walletBalance: doc.walletBalance ?? 0,
       otpRate: doc.otpRate ?? 0.50,
     };
@@ -254,6 +275,7 @@ export interface AllocatedNumberRecord {
   status: 'pending' | 'success' | 'expired';
   otp?: string;
   sms?: string;
+  otpList: { otp: string; sms: string; receivedAt: string }[];
   expiresAt: string;
   allocatedAt: string;
 }
@@ -315,6 +337,43 @@ export const AllocatedNumberDB = {
     return !!doc;
   },
 
+  async updateOtp(id: string, userId: string, otp: string, sms: string): Promise<AllocatedNumberRecord | null> {
+    await connectDB();
+    const doc = await AllocatedNumberModel.findOneAndUpdate(
+      { _id: id, userId, status: 'pending' },
+      { $set: { otp, sms, status: 'success' }, $push: { otpList: { otp, sms, receivedAt: new Date() } } },
+      { new: true }
+    );
+    return doc ? this.parse(doc) : null;
+  },
+
+  async appendOtp(id: string, userId: string, otp: string, sms: string): Promise<AllocatedNumberRecord | null> {
+    await connectDB();
+    const doc = await AllocatedNumberModel.findOneAndUpdate(
+      { _id: id, userId, status: 'success' },
+      { $set: { otp, sms }, $push: { otpList: { otp, sms, receivedAt: new Date() } } },
+      { new: true }
+    );
+    return doc ? this.parse(doc) : null;
+  },
+
+  async countByUserIdInRange(userId: string, startDate: Date, endDate: Date, status?: string): Promise<number> {
+    await connectDB();
+    const query: any = { userId, allocatedAt: { $gte: startDate, $lte: endDate } };
+    if (status) query.status = status;
+    return AllocatedNumberModel.countDocuments(query);
+  },
+
+  async getDailyCounts(userId: string, startDate: Date, endDate: Date): Promise<{ date: string; count: number }[]> {
+    await connectDB();
+    const results = await AllocatedNumberModel.aggregate([
+      { $match: { userId, allocatedAt: { $gte: startDate, $lte: endDate } } },
+      { $group: { _id: { $dateToString: { format: '%m/%d', date: '$allocatedAt' } }, count: { $sum: 1 } } },
+      { $sort: { _id: 1 } },
+    ]);
+    return results.map((r: any) => ({ date: r._id, count: r.count }));
+  },
+
   parse(doc: any): AllocatedNumberRecord {
     return {
       id: doc._id.toString(),
@@ -326,9 +385,38 @@ export const AllocatedNumberDB = {
       status: doc.status || 'pending',
       otp: doc.otp,
       sms: doc.sms,
+      otpList: (doc.otpList || []).map((item: any) => ({
+        otp: item.otp,
+        sms: item.sms,
+        receivedAt: item.receivedAt ? item.receivedAt.toISOString() : new Date().toISOString(),
+      })),
       expiresAt: doc.expiresAt ? doc.expiresAt.toISOString() : new Date().toISOString(),
       allocatedAt: doc.allocatedAt ? doc.allocatedAt.toISOString() : new Date().toISOString(),
     };
+  },
+
+  // --- Admin-level aggregate queries ---
+
+  async countAllInRange(startDate: Date, endDate: Date, status?: string): Promise<number> {
+    await connectDB();
+    const query: any = { allocatedAt: { $gte: startDate, $lte: endDate } };
+    if (status) query.status = status;
+    return AllocatedNumberModel.countDocuments(query);
+  },
+
+  async countAll(): Promise<number> {
+    await connectDB();
+    return AllocatedNumberModel.countDocuments({});
+  },
+
+  async getDailyCountsAll(startDate: Date, endDate: Date): Promise<{ date: string; count: number }[]> {
+    await connectDB();
+    const results = await AllocatedNumberModel.aggregate([
+      { $match: { allocatedAt: { $gte: startDate, $lte: endDate } } },
+      { $group: { _id: { $dateToString: { format: '%m/%d', date: '$allocatedAt' } }, count: { $sum: 1 } } },
+      { $sort: { _id: 1 } },
+    ]);
+    return results.map((r: any) => ({ date: r._id, count: r.count }));
   },
 };
 
@@ -406,28 +494,95 @@ export const PaymentRequestDB = {
       updatedAt: doc.updatedAt ? doc.updatedAt.toISOString() : new Date().toISOString(),
     };
   },
+
+  async sumByStatus(status: string): Promise<number> {
+    await connectDB();
+    const result = await PaymentRequestModel.aggregate([
+      { $match: { status } },
+      { $group: { _id: null, total: { $sum: '$amount' } } },
+    ]);
+    return result.length > 0 ? result[0].total : 0;
+  },
+
+  async countByStatus(status: string): Promise<number> {
+    await connectDB();
+    return PaymentRequestModel.countDocuments({ status });
+  },
 };
 
 // UserWallet Database Operations
 export const UserWalletDB = {
-  async findByUserId(userId: string): Promise<{ bkash: string; nagad: string; rocket: string; binance: string } | null> {
+  async findByUserId(userId: string): Promise<Record<string, string> | null> {
     await connectDB();
     const doc = await UserWalletModel.findOne({ userId });
     if (!doc) return null;
-    return {
-      bkash: doc.wallets?.bkash || '',
-      nagad: doc.wallets?.nagad || '',
-      rocket: doc.wallets?.rocket || '',
-      binance: doc.wallets?.binance || '',
-    };
+    const wallets: Record<string, string> = {};
+    if (doc.wallets instanceof Map) {
+      doc.wallets.forEach((value: string, key: string) => {
+        wallets[key] = value || '';
+      });
+    } else if (doc.wallets && typeof doc.wallets === 'object') {
+      // Handle legacy plain object format
+      for (const [key, value] of Object.entries(doc.wallets)) {
+        wallets[key] = (value as string) || '';
+      }
+    }
+    return wallets;
   },
 
-  async upsert(userId: string, wallets: { bkash: string; nagad: string; rocket: string; binance: string }): Promise<void> {
+  async upsert(userId: string, wallets: Record<string, string>): Promise<void> {
     await connectDB();
     await UserWalletModel.findOneAndUpdate(
       { userId },
       { userId, wallets },
       { upsert: true, new: true }
     );
+  },
+};
+
+export const NotificationDB = {
+  async create(data: { title: string; message: string; createdBy: string }): Promise<string> {
+    await connectDB();
+    const doc = await NotificationModel.create(data);
+    return doc._id.toString();
+  },
+
+  async getAll(limit = 50): Promise<{ id: string; title: string; message: string; createdBy: string; readBy: string[]; createdAt: Date }[]> {
+    await connectDB();
+    const docs = await NotificationModel.find().sort({ createdAt: -1 }).limit(limit).lean();
+    return docs.map((d: any) => ({
+      id: d._id.toString(),
+      title: d.title,
+      message: d.message,
+      createdBy: d.createdBy,
+      readBy: d.readBy || [],
+      createdAt: d.createdAt,
+    }));
+  },
+
+  async markAsRead(notificationId: string, userId: string): Promise<void> {
+    await connectDB();
+    await NotificationModel.updateOne(
+      { _id: notificationId },
+      { $addToSet: { readBy: userId } }
+    );
+  },
+
+  async markAllAsRead(userId: string): Promise<void> {
+    await connectDB();
+    await NotificationModel.updateMany(
+      { readBy: { $ne: userId } },
+      { $addToSet: { readBy: userId } }
+    );
+  },
+
+  async getUnreadCount(userId: string): Promise<number> {
+    await connectDB();
+    return NotificationModel.countDocuments({ readBy: { $ne: userId } });
+  },
+
+  async deleteById(id: string): Promise<void> {
+    await connectDB();
+    await NotificationModel.deleteOne({ _id: id });
   },
 };

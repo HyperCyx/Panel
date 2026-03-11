@@ -18,9 +18,13 @@ export function SettingsTab() {
     const [signupEnabled, setSignupEnabled] = useState(true);
     const [emailChangeEnabled, setEmailChangeEnabled] = useState(true);
     const [numberExpiryMinutes, setNumberExpiryMinutes] = useState(5);
+    const [otpCheckInterval, setOtpCheckInterval] = useState(5);
+    const [consoleRefreshInterval, setConsoleRefreshInterval] = useState(60);
     const [currency, setCurrency] = useState('৳');
     const [paymentNetwork, setPaymentNetwork] = useState('TRC20');
     const [minimumWithdrawal, setMinimumWithdrawal] = useState(10);
+    const [defaultOrigins, setDefaultOrigins] = useState<string[]>([]);
+    const [newOrigin, setNewOrigin] = useState('');
     const [isLoading, setIsLoading] = useState(true);
     
     useEffect(() => {
@@ -35,9 +39,12 @@ export function SettingsTab() {
                     setSignupEnabled(result.signupEnabled ?? true);
                     setEmailChangeEnabled(result.emailChangeEnabled ?? true);
                     setNumberExpiryMinutes(result.numberExpiryMinutes ?? 5);
+                    setOtpCheckInterval(result.otpCheckInterval ?? 5);
+                    setConsoleRefreshInterval(result.consoleRefreshInterval ?? 60);
                     setCurrency(result.currency ?? '৳');
                     setPaymentNetwork(result.paymentNetwork ?? 'TRC20');
                     setMinimumWithdrawal(result.minimumWithdrawal ?? 10);
+                    setDefaultOrigins(result.defaultOrigins ?? []);
                 }
             } catch (error) {
                 toast({ variant: 'destructive', title: 'Error', description: 'Failed to load settings' });
@@ -56,9 +63,12 @@ export function SettingsTab() {
                 signupEnabled,
                 emailChangeEnabled,
                 numberExpiryMinutes,
+                otpCheckInterval,
+                consoleRefreshInterval,
                 currency,
                 paymentNetwork,
                 minimumWithdrawal,
+                defaultOrigins,
             } as Partial<AdminSettings>);
             if (result.error) {
                 toast({ variant: 'destructive', title: 'Failed to save settings', description: result.error });
@@ -127,6 +137,42 @@ export function SettingsTab() {
                             disabled={isLoading}
                         />
                     </div>
+                    <div className="flex flex-row items-center justify-between rounded-lg border p-4">
+                        <div className="space-y-0.5">
+                            <Label htmlFor="otp-check-interval" className="cursor-pointer">OTP Check Interval (seconds)</Label>
+                            <p className="text-sm text-muted-foreground">
+                                How often to check for incoming OTP on pending numbers.
+                            </p>
+                        </div>
+                        <Input
+                            id="otp-check-interval"
+                            type="number"
+                            min={3}
+                            max={120}
+                            className="w-20 text-center"
+                            value={otpCheckInterval}
+                            onChange={(e) => setOtpCheckInterval(Math.max(3, Math.min(120, parseInt(e.target.value) || 5)))}
+                            disabled={isLoading}
+                        />
+                    </div>
+                    <div className="flex flex-row items-center justify-between rounded-lg border p-4">
+                        <div className="space-y-0.5">
+                            <Label htmlFor="console-refresh-interval" className="cursor-pointer">Console Refresh Interval (seconds)</Label>
+                            <p className="text-sm text-muted-foreground">
+                                How often the console page auto-refreshes to show new SMS data. Set 0 to disable.
+                            </p>
+                        </div>
+                        <Input
+                            id="console-refresh-interval"
+                            type="number"
+                            min={0}
+                            max={600}
+                            className="w-20 text-center"
+                            value={consoleRefreshInterval}
+                            onChange={(e) => setConsoleRefreshInterval(Math.max(0, Math.min(600, parseInt(e.target.value) || 60)))}
+                            disabled={isLoading}
+                        />
+                    </div>
                 </CardContent>
             </Card>
 
@@ -182,6 +228,73 @@ export function SettingsTab() {
                             onChange={(e) => setMinimumWithdrawal(Math.max(1, parseInt(e.target.value) || 10))}
                             disabled={isLoading}
                         />
+                    </div>
+                </CardContent>
+            </Card>
+
+            <Card>
+                <CardHeader>
+                    <CardTitle>Access List Settings</CardTitle>
+                    <CardDescription>Configure default origin filters shown to users on the Access List page.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <div className="space-y-3">
+                        <Label>Default Origins</Label>
+                        <p className="text-sm text-muted-foreground">
+                            These origins will appear as quick-filter buttons on the user Access List page.
+                        </p>
+                        {defaultOrigins.length > 0 && (
+                            <div className="flex flex-wrap gap-2">
+                                {defaultOrigins.map((origin, idx) => (
+                                    <span
+                                        key={idx}
+                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/20"
+                                    >
+                                        {origin}
+                                        <button
+                                            type="button"
+                                            onClick={() => setDefaultOrigins(prev => prev.filter((_, i) => i !== idx))}
+                                            className="hover:text-destructive transition-colors"
+                                            disabled={isLoading}
+                                        >
+                                            ×
+                                        </button>
+                                    </span>
+                                ))}
+                            </div>
+                        )}
+                        <div className="flex gap-2">
+                            <Input
+                                placeholder="e.g., Telegram, Bitget, WhatsApp"
+                                value={newOrigin}
+                                onChange={(e) => setNewOrigin(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        const trimmed = newOrigin.trim();
+                                        if (trimmed && !defaultOrigins.includes(trimmed)) {
+                                            setDefaultOrigins(prev => [...prev, trimmed]);
+                                            setNewOrigin('');
+                                        }
+                                    }
+                                }}
+                                disabled={isLoading}
+                            />
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => {
+                                    const trimmed = newOrigin.trim();
+                                    if (trimmed && !defaultOrigins.includes(trimmed)) {
+                                        setDefaultOrigins(prev => [...prev, trimmed]);
+                                        setNewOrigin('');
+                                    }
+                                }}
+                                disabled={isLoading || !newOrigin.trim()}
+                            >
+                                Add
+                            </Button>
+                        </div>
                     </div>
                 </CardContent>
             </Card>

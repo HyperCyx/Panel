@@ -5,6 +5,7 @@ import { createContext, useContext, ReactNode } from "react"
 // Define the shape of your settings
 interface SiteSettings {
     siteName: string;
+    siteVersion: string;
     footerText: string;
     currency: string;
 }

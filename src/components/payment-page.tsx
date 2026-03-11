@@ -6,7 +6,7 @@ import {
   AlertCircle, Copy, Check, Save, ChevronDown,
 } from 'lucide-react';
 import { createPaymentRequest, getUserPaymentRequests, getUserWallets, saveUserWallets } from '@/app/actions';
-import type { PaymentRequestInfo, UserWalletInfo } from '@/lib/types';
+import type { PaymentRequestInfo, UserWalletInfo, PaymentMethod } from '@/lib/types';
 
 interface PaymentPageProps {
   userId: string;
@@ -14,14 +14,8 @@ interface PaymentPageProps {
   currency: string;
   paymentNetwork: string;
   minimumWithdrawal: number;
+  paymentMethods: PaymentMethod[];
 }
-
-const WALLET_TYPES = [
-  { key: 'bkash' as const, label: 'bKash', placeholder: '01XXXXXXXXX' },
-  { key: 'nagad' as const, label: 'Nagad', placeholder: '01XXXXXXXXX' },
-  { key: 'rocket' as const, label: 'Rocket', placeholder: '01XXXXXXXXX' },
-  { key: 'binance' as const, label: 'Binance (Pay ID / TRC20)', placeholder: 'Address / ID' },
-];
 
 function StatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {
@@ -43,9 +37,10 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-export function PaymentPage({ userId, walletBalance, currency, paymentNetwork, minimumWithdrawal }: PaymentPageProps) {
+export function PaymentPage({ userId, walletBalance, currency, paymentNetwork, minimumWithdrawal, paymentMethods }: PaymentPageProps) {
+  const enabledMethods = paymentMethods.filter(m => m.enabled);
   // Wallet setup
-  const [wallets, setWallets] = useState<UserWalletInfo>({ bkash: '', nagad: '', rocket: '', binance: '' });
+  const [wallets, setWallets] = useState<UserWalletInfo>({});
   const [loadingWallets, setLoadingWallets] = useState(true);
   const [savingWallets, setSavingWallets] = useState(false);
   const [walletSaveMsg, setWalletSaveMsg] = useState<string | null>(null);
@@ -107,9 +102,9 @@ export function PaymentPage({ userId, walletBalance, currency, paymentNetwork, m
     }
   };
 
-  const availableWallets = WALLET_TYPES.filter(w => wallets[w.key]?.trim());
-  const selectedWalletInfo = WALLET_TYPES.find(w => w.key === selectedWallet);
-  const selectedWalletAddress = selectedWallet ? wallets[selectedWallet as keyof UserWalletInfo] : '';
+  const availableWallets = enabledMethods.filter(m => wallets[m.id]?.trim());
+  const selectedWalletInfo = enabledMethods.find(m => m.id === selectedWallet);
+  const selectedWalletAddress = selectedWallet ? wallets[selectedWallet] : '';
 
   const handleSubmit = async () => {
     setError(null);
@@ -127,7 +122,7 @@ export function PaymentPage({ userId, walletBalance, currency, paymentNetwork, m
       const result = await createPaymentRequest({
         amount: parsedAmount,
         walletAddress: selectedWalletAddress,
-        walletType: selectedWalletInfo?.label || selectedWallet,
+        walletType: selectedWalletInfo?.name || selectedWallet,
       });
       if (result.error) {
         setError(result.error);
@@ -175,14 +170,14 @@ export function PaymentPage({ userId, walletBalance, currency, paymentNetwork, m
           <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
         ) : (
           <div className="space-y-3">
-            {WALLET_TYPES.map(w => (
-              <div key={w.key}>
-                <label className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-1 block">{w.label}</label>
+            {enabledMethods.map(m => (
+              <div key={m.id}>
+                <label className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-1 block">{m.name}</label>
                 <input
-                  type="text"
-                  value={wallets[w.key]}
-                  onChange={(e) => setWallets(prev => ({ ...prev, [w.key]: e.target.value }))}
-                  placeholder={w.placeholder}
+                  type={m.fieldType === 'number' ? 'tel' : 'text'}
+                  value={wallets[m.id] || ''}
+                  onChange={(e) => setWallets(prev => ({ ...prev, [m.id]: e.target.value }))}
+                  placeholder={m.placeholder}
                   className="w-full px-3 py-2.5 rounded-xl border border-border bg-muted text-sm font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-primary transition"
                 />
               </div>
@@ -230,23 +225,23 @@ export function PaymentPage({ userId, walletBalance, currency, paymentNetwork, m
                   className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-border bg-muted text-sm text-foreground hover:border-primary/30 transition"
                 >
                   <span className={selectedWalletInfo ? 'font-medium truncate' : 'text-muted-foreground'}>
-                    {selectedWalletInfo ? `${selectedWalletInfo.label} — ${selectedWalletAddress}` : 'Choose a wallet...'}
+                    {selectedWalletInfo ? `${selectedWalletInfo.name} — ${selectedWalletAddress}` : 'Choose a wallet...'}
                   </span>
                   <ChevronDown className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                 </button>
                 {showDropdown && (
                   <div className="absolute top-full left-0 right-0 mt-1 bg-card border border-border rounded-xl shadow-lg z-20 overflow-hidden">
-                    {availableWallets.map((w, i) => (
+                    {availableWallets.map((m, i) => (
                       <button
-                        key={w.key}
+                        key={m.id}
                         type="button"
-                        onClick={() => { setSelectedWallet(w.key); setShowDropdown(false); setError(null); }}
+                        onClick={() => { setSelectedWallet(m.id); setShowDropdown(false); setError(null); }}
                         className={`w-full text-left px-4 py-3 text-sm hover:bg-primary/10 transition ${
-                          selectedWallet === w.key ? 'bg-primary/10 text-primary font-semibold' : 'text-foreground'
+                          selectedWallet === m.id ? 'bg-primary/10 text-primary font-semibold' : 'text-foreground'
                         } ${i > 0 ? 'border-t border-border/50' : ''}`}
                       >
-                        <span className="font-medium">{w.label}</span>
-                        <span className="text-xs text-muted-foreground ml-2 font-mono">{wallets[w.key]}</span>
+                        <span className="font-medium">{m.name}</span>
+                        <span className="text-xs text-muted-foreground ml-2 font-mono">{wallets[m.id]}</span>
                       </button>
                     ))}
                   </div>

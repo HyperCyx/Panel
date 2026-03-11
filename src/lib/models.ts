@@ -16,7 +16,6 @@ export interface IUser extends Document {
   approvedBy?: string;
   commissionRate: number;
   agentWalletBalance: number;
-  privateNumberList: string[];
   walletBalance: number;
   otpRate: number;
 }
@@ -36,7 +35,6 @@ const UserSchema: Schema = new Schema({
   approvedBy: { type: String },
   commissionRate: { type: Number, default: 0 },
   agentWalletBalance: { type: Number, default: 0 },
-  privateNumberList: { type: [String], default: [] },
   walletBalance: { type: Number, default: 0 },
   otpRate: { type: Number, default: 0.50 },
 }, { timestamps: true });
@@ -68,6 +66,7 @@ export interface IAllocatedNumber extends Document {
   status: 'pending' | 'success' | 'expired';
   otp?: string;
   sms?: string;
+  otpList: { otp: string; sms: string; receivedAt: Date }[];
   expiresAt: Date;
   allocatedAt: Date;
 }
@@ -81,9 +80,15 @@ const AllocatedNumberSchema: Schema = new Schema({
   status: { type: String, default: 'pending', enum: ['pending', 'success', 'expired'] },
   otp: { type: String },
   sms: { type: String },
+  otpList: [{ otp: { type: String }, sms: { type: String }, receivedAt: { type: Date, default: Date.now } }],
   expiresAt: { type: Date, required: true },
   allocatedAt: { type: Date, default: Date.now },
 });
+
+// Compound indexes for common queries
+AllocatedNumberSchema.index({ status: 1, expiresAt: 1 });       // expireOldNumbers
+AllocatedNumberSchema.index({ userId: 1, allocatedAt: -1 });     // findByUserId sorted
+AllocatedNumberSchema.index({ allocatedAt: 1 });                 // admin range queries
 
 export const AllocatedNumber: Model<IAllocatedNumber> = models.AllocatedNumber || mongoose.model<IAllocatedNumber>('AllocatedNumber', AllocatedNumberSchema);
 
@@ -111,7 +116,7 @@ const PaymentRequestSchema: Schema = new Schema({
   currency: { type: String, default: 'USDT' },
   walletAddress: { type: String, required: true },
   network: { type: String, default: 'TRC20' },
-  status: { type: String, default: 'pending', enum: ['pending', 'approved', 'rejected', 'rejected_deducted'] },
+  status: { type: String, default: 'pending', enum: ['pending', 'approved', 'rejected', 'rejected_deducted'], index: true },
   adminNote: { type: String },
 }, { timestamps: true });
 
@@ -121,24 +126,36 @@ export const PaymentRequest: Model<IPaymentRequest> = models.PaymentRequest || m
 // UserWallet Interface and Schema
 export interface IUserWallet extends Document {
   userId: string;
-  wallets: {
-    bkash: string;
-    nagad: string;
-    rocket: string;
-    binance: string;
-  };
+  wallets: Map<string, string>;
   createdAt: Date;
   updatedAt: Date;
 }
 
 const UserWalletSchema: Schema = new Schema({
   userId: { type: String, required: true, unique: true, index: true },
-  wallets: {
-    bkash: { type: String, default: '' },
-    nagad: { type: String, default: '' },
-    rocket: { type: String, default: '' },
-    binance: { type: String, default: '' },
-  },
+  wallets: { type: Map, of: String, default: () => new Map() },
 }, { timestamps: true });
 
 export const UserWallet: Model<IUserWallet> = models.UserWallet || mongoose.model<IUserWallet>('UserWallet', UserWalletSchema);
+
+
+// Notification Interface and Schema
+export interface INotification extends Document {
+  title: string;
+  message: string;
+  createdBy: string;
+  readBy: string[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const NotificationSchema: Schema = new Schema({
+  title: { type: String, required: true },
+  message: { type: String, required: true },
+  createdBy: { type: String, required: true },
+  readBy: [{ type: String }],
+}, { timestamps: true });
+
+NotificationSchema.index({ createdAt: -1 });
+
+export const Notification: Model<INotification> = models.Notification || mongoose.model<INotification>('Notification', NotificationSchema);

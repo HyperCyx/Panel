@@ -1,13 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Menu, X, Bell, LayoutDashboard, LogOut, ShieldCheck,
   Smartphone, Globe, Code, Trophy, Target, ClipboardList, Wifi,
   CreditCard, User, BellRing, Pencil, Loader2,
 } from 'lucide-react';
 import { usePathname } from 'next/navigation';
-import { logout, updateUserProfile } from '@/app/actions';
+import { logout, updateUserProfile, getUnreadNotificationCount } from '@/app/actions';
 import type { UserProfile } from '@/lib/types';
 import Link from 'next/link';
 import {
@@ -72,11 +72,17 @@ export function DashboardShell({ user, siteName, children }: DashboardShellProps
   const [editEmail, setEditEmail] = useState(user.email ?? '');
   const [isUpdating, setIsUpdating] = useState(false);
   const { toast } = useToast();
-  const { footerText, siteName: ctxSiteName } = useSettings();
+  const { footerText, siteName: ctxSiteName, siteVersion } = useSettings();
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    getUnreadNotificationCount().then(r => setUnreadCount(r.count));
+  }, [pathname]);
 
   const processedFooterText = (footerText || '')
     .replace('{YEAR}', new Date().getFullYear().toString())
-    .replace('{SITENAME}', ctxSiteName || siteName);
+    .replace('{SITENAME}', ctxSiteName || siteName)
+    .replace('{VERSION}', siteVersion || '');
 
   const initials = (user.name || user.email || 'U')
     .split(' ')
@@ -120,11 +126,6 @@ export function DashboardShell({ user, siteName, children }: DashboardShellProps
             <Globe className="h-7 w-7 text-primary" />
             <div>
               <span className="text-xl font-extrabold text-primary tracking-wide">{siteName}</span>
-              <div className="mt-0.5">
-                <span className="text-[10px] font-semibold bg-primary/10 text-primary px-2 py-0.5 rounded-md">
-                  V-3.0.2
-                </span>
-              </div>
             </div>
           </div>
           <button
@@ -199,12 +200,18 @@ export function DashboardShell({ user, siteName, children }: DashboardShellProps
             <span className="text-lg font-extrabold text-primary tracking-wide">{siteName}</span>
           </div>
           <div className="flex items-center gap-2">
-            <button
+            <Link
+              href="/dashboard/notifications"
               className="relative p-2 rounded-full hover:bg-muted text-muted-foreground transition-colors"
               aria-label="Notifications"
             >
               <Bell className="h-5 w-5" />
-            </button>
+              {unreadCount > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-[9px] font-bold min-w-[16px] h-4 flex items-center justify-center rounded-full px-1">
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              )}
+            </Link>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
@@ -261,6 +268,11 @@ export function DashboardShell({ user, siteName, children }: DashboardShellProps
         <footer className="border-t border-border bg-background/80 lg:pl-72">
           <div className="px-4 py-4 max-w-5xl mx-auto text-center text-xs text-muted-foreground">
             {processedFooterText}
+            {siteVersion && (
+              <span className="ml-2 text-[10px] font-semibold bg-primary/10 text-primary px-2 py-0.5 rounded-md">
+                v{siteVersion}
+              </span>
+            )}
           </div>
         </footer>
       )}

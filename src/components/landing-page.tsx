@@ -7,12 +7,14 @@ interface LandingPageProps {
   siteName: string;
   signupEnabled: boolean;
   footerText: string;
+  siteVersion: string;
 }
 
-export function LandingPage({ siteName, signupEnabled, footerText }: LandingPageProps) {
+export function LandingPage({ siteName, signupEnabled, footerText, siteVersion }: LandingPageProps) {
   const processedFooterText = footerText
     .replace('{YEAR}', new Date().getFullYear().toString())
-    .replace('{SITENAME}', siteName);
+    .replace('{SITENAME}', siteName)
+    .replace('{VERSION}', siteVersion || '');
 
   return (
     <div className="flex flex-col min-h-dvh bg-background text-foreground">
@@ -54,14 +56,14 @@ export function LandingPage({ siteName, signupEnabled, footerText }: LandingPage
             <p className="text-lg md:text-xl text-muted-foreground mb-10 max-w-2xl mx-auto">
               Leverage our robust network of International Premium Rate Numbers to deliver OTPs and generate revenue from every message you send.
             </p>
-            <div className="flex justify-center gap-4">
+            <div className="flex flex-col sm:flex-row justify-center items-center gap-4">
                {signupEnabled && (
                 <Link href="/signup">
-                    <Button size="lg">Start Earning Now</Button>
+                    <Button size="lg" className="w-full sm:w-auto">Start Earning Now</Button>
                 </Link>
                )}
               <Link href="/dashboard">
-                <Button size="lg" variant="outline">
+                <Button size="lg" variant="outline" className="w-full sm:w-auto">
                   Access Dashboard <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
               </Link>
@@ -162,6 +164,11 @@ export function LandingPage({ siteName, signupEnabled, footerText }: LandingPage
       <footer className="border-t bg-muted/50">
         <div className="container mx-auto px-4 md:px-6 py-6 text-center text-muted-foreground text-sm">
           {processedFooterText}
+          {siteVersion && (
+            <span className="ml-2 text-[10px] font-semibold bg-primary/10 text-primary px-2 py-0.5 rounded-md">
+              v{siteVersion}
+            </span>
+          )}
         </div>
       </footer>
     </div>

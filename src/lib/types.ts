@@ -41,7 +41,6 @@ export interface UserProfile {
   approvedBy?: string | null;
   commissionRate?: number;
   agentWalletBalance?: number;
-  privateNumberList?: string[];
   walletBalance?: number;
   otpRate?: number;
 }
@@ -73,19 +72,25 @@ export interface AdminSettings extends ColorSettings {
   proxySettings: ProxySettings;
   signupEnabled: boolean;
   siteName: string;
+  siteVersion: string;
   footerText: string;
   emailChangeEnabled: boolean;
-  numberList: string[];
   errorMappings: { reasonCode: string, customMessage: string }[];
   numberExpiryMinutes: number;
+  otpCheckInterval: number;
+  consoleRefreshInterval: number;
   currency: string;
   paymentWalletAddress: string;
   paymentNetwork: string;
   minimumWithdrawal: number;
+  defaultOrigins: string[];
+  blockedApps: string[];
+  paymentMethods: PaymentMethod[];
 }
 
 export interface PublicSettings extends ColorSettings {
     siteName: string;
+    siteVersion: string;
     signupEnabled: boolean;
     emailChangeEnabled: boolean;
     footerText: string;
@@ -93,6 +98,11 @@ export interface PublicSettings extends ColorSettings {
     paymentWalletAddress: string;
     paymentNetwork: string;
     minimumWithdrawal: number;
+    otpCheckInterval: number;
+    consoleRefreshInterval: number;
+    defaultOrigins: string[];
+    blockedApps: string[];
+    paymentMethods: PaymentMethod[];
     [key: string]: any;
 }
 
@@ -110,6 +120,23 @@ export interface DashboardStats {
   todayAllocatedNumbers: number;
 }
 
+export interface AdminDashboardStats {
+  totalUsers: number;
+  activeUsers: number;
+  blockedUsers: number;
+  todayNumbersAll: number;
+  todaySuccessAll: number;
+  yesterdayNumbersAll: number;
+  yesterdaySuccessAll: number;
+  totalNumbersAll: number;
+  pendingPaymentsAmount: number;
+  pendingPaymentsCount: number;
+  approvedPaymentsAmount: number;
+  approvedPaymentsCount: number;
+  totalUserBalances: number;
+  weekTrend: { date: string; count: number }[];
+}
+
 export interface AllocatedNumberInfo {
   id: string;
   number: string;
@@ -118,6 +145,7 @@ export interface AllocatedNumberInfo {
   status: 'pending' | 'success' | 'expired';
   otp?: string;
   sms?: string;
+  otpList?: { otp: string; sms: string; receivedAt: string }[];
   expiresAt: string;
   allocatedAt: string;
 }
@@ -159,9 +187,12 @@ export interface PaymentRequestInfo {
   updatedAt: string;
 }
 
-export interface UserWalletInfo {
-  bkash: string;
-  nagad: string;
-  rocket: string;
-  binance: string;
+export interface PaymentMethod {
+  id: string;
+  name: string;
+  placeholder: string;
+  fieldType: 'number' | 'text';
+  enabled: boolean;
 }
+
+export type UserWalletInfo = Record<string, string>;

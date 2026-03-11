@@ -5,13 +5,14 @@ import {
   Smartphone, Zap, RefreshCw, Loader2, ChevronDown,
   Copy, Check, Phone, AlertCircle, Clock,
 } from 'lucide-react';
-import { allocateNumber, getUserAllocatedNumbers } from '@/app/actions';
+import { allocateNumber, getUserAllocatedNumbers, checkNumberOtp } from '@/app/actions';
 import type { AllocatedNumberInfo } from '@/lib/types';
 
 interface GetNumberProps {
   userId: string;
   currency?: string;
   otpRate?: number;
+  otpCheckInterval?: number;
 }
 
 type RecordFilter = 'all' | 'success' | 'pending' | 'expired';
@@ -71,7 +72,7 @@ function CountdownTimer({ expiresAt, status }: { expiresAt: string; status: stri
   );
 }
 
-export function GetNumber({ userId, currency = '৳', otpRate = 0.50 }: GetNumberProps) {
+export function GetNumber({ userId, currency = '৳', otpRate = 0.50, otpCheckInterval = 5 }: GetNumberProps) {
   const [rangeInput, setRangeInput] = useState('');
   const [gettingNumber, setGettingNumber] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
@@ -108,6 +109,79 @@ export function GetNumber({ userId, currency = '৳', otpRate = 0.50 }: GetNumbe
     const interval = setInterval(fetchRecords, 30000);
     return () => clearInterval(interval);
   }, [fetchRecords]);
+
+  // OTP auto-polling for pending numbers
+  const recordsRef = useRef(records);
+  recordsRef.current = records;
+  const isPollingRef = useRef(false);
+
+  useEffect(() => {
+    const intervalMs = Math.max(3, otpCheckInterval) * 1000;
+    let active = true;
+
+    const pollPendingNumbers = async () => {
+      if (!active || isPollingRef.current) return;
+      isPollingRef.current = true;
+
+      try {
+        // Mark locally-expired records immediately so they're never re-checked
+        const now = Date.now();
+        const expiredIds: string[] = [];
+        const pollableRecords: AllocatedNumberInfo[] = [];
+
+        for (const r of recordsRef.current) {
+          if (r.status === 'expired') continue;
+          if (r.status !== 'pending' && r.status !== 'success') continue;
+          if (new Date(r.expiresAt).getTime() <= now) {
+            if (r.status === 'pending') expiredIds.push(r.id);
+            continue;
+          }
+          pollableRecords.push(r);
+        }
+
+        // Update expired records in local state right away
+        if (expiredIds.length > 0) {
+          setRecords(prev => prev.map(r =>
+            expiredIds.includes(r.id) ? { ...r, status: 'expired' as const } : r
+          ));
+        }
+
+        if (pollableRecords.length === 0) return;
+
+        for (const rec of pollableRecords) {
+          if (!active) break;
+          // Skip if expired during this loop iteration
+          if (new Date(rec.expiresAt).getTime() <= Date.now()) continue;
+          try {
+            const result = await checkNumberOtp(rec.id);
+            if (result.status === 'success' && result.otp) {
+              setRecords(prev => prev.map(r =>
+                r.id === rec.id
+                  ? { ...r, status: 'success' as const, otp: result.otp, sms: result.sms, otpList: result.otpList }
+                  : r
+              ));
+            } else if (result.status === 'expired') {
+              setRecords(prev => prev.map(r =>
+                r.id === rec.id ? { ...r, status: 'expired' as const } : r
+              ));
+            }
+          } catch {
+            // silently fail
+          }
+        }
+      } finally {
+        isPollingRef.current = false;
+      }
+    };
+
+    const interval = setInterval(pollPendingNumbers, intervalMs);
+    pollPendingNumbers();
+
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [otpCheckInterval]);
 
   // Load saved range from browser cookie on mount
   useEffect(() => {
@@ -276,83 +350,164 @@ export function GetNumber({ userId, currency = '৳', otpRate = 0.50 }: GetNumbe
           </button>
         </div>
 
-        {/* Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead>
-              <tr className="border-b border-border">
-                <th className="pb-3 pr-3 text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Phone &<br/>Status</th>
-                <th className="pb-3 pr-3 text-[11px] font-bold uppercase tracking-widest text-muted-foreground">OTP /<br/>SMS</th>
-                <th className="pb-3 pr-3 text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Country /<br/>Operator</th>
-                <th className="pb-3 text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Timer /<br/>Expiry</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loadingRecords ? (
-                <tr>
-                  <td colSpan={4} className="py-12 text-center">
-                    <div className="flex flex-col items-center gap-2">
-                      <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                      <span className="text-sm text-muted-foreground">Loading records...</span>
-                    </div>
-                  </td>
-                </tr>
-              ) : paginatedRecords.length === 0 ? (
-                <tr>
-                  <td colSpan={4} className="py-12 text-center text-sm text-muted-foreground font-medium">
-                    No Records Found
-                  </td>
-                </tr>
-              ) : (
-                paginatedRecords.map((rec) => {
-                  const effectiveStatus = getEffectiveStatus(rec);
-                  const displayNumber = rec.number;
-                  return (
-                    <tr key={rec.id} className="border-b border-border/50 last:border-0 hover:bg-muted/50">
-                      <td className="py-3 pr-3">
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          <p className="text-xs font-mono font-semibold text-foreground truncate">{displayNumber}</p>
+        {/* Records */}
+        <div className="space-y-3">
+          {loadingRecords ? (
+            <div className="py-12 flex flex-col items-center gap-2">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              <span className="text-sm text-muted-foreground">Loading records...</span>
+            </div>
+          ) : paginatedRecords.length === 0 ? (
+            <div className="py-12 text-center text-sm text-muted-foreground font-medium">
+              No Records Found
+            </div>
+          ) : (
+            paginatedRecords.map((rec) => {
+              const effectiveStatus = getEffectiveStatus(rec);
+              const displayNumber = rec.number;
+
+              const borderColor =
+                effectiveStatus === 'success'
+                  ? 'border-emerald-400'
+                  : effectiveStatus === 'expired'
+                  ? 'border-red-400'
+                  : 'border-amber-400';
+
+              const bgColor =
+                effectiveStatus === 'success'
+                  ? 'bg-emerald-50/50 dark:bg-emerald-950/20'
+                  : effectiveStatus === 'expired'
+                  ? 'bg-red-50/50 dark:bg-red-950/20'
+                  : 'bg-amber-50/50 dark:bg-amber-950/20';
+
+              const leftAccent =
+                effectiveStatus === 'success'
+                  ? 'bg-emerald-400'
+                  : effectiveStatus === 'expired'
+                  ? 'bg-red-400'
+                  : 'bg-amber-400';
+
+              return (
+                <div
+                  key={rec.id}
+                  className={`relative rounded-xl border-2 ${borderColor} ${bgColor} overflow-hidden transition-all`}
+                >
+                  {/* Left color accent bar */}
+                  <div className={`absolute left-0 top-0 bottom-0 w-1 ${leftAccent}`} />
+
+                  <div className="pl-4 pr-3 py-3">
+                    {/* Top row: Phone + Copy | Status + Timer */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-sm font-mono font-bold text-foreground truncate">{displayNumber}</p>
                           <button
                             onClick={() => handleCopy(displayNumber)}
                             className={`p-1 rounded transition-all flex-shrink-0 ${
                               copied === displayNumber ? 'text-emerald-600' : 'text-muted-foreground hover:text-primary'
                             }`}
                           >
-                            {copied === displayNumber ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                            {copied === displayNumber ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
                           </button>
                         </div>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
                         <StatusBadge status={effectiveStatus} />
-                      </td>
-                      <td className="py-3 pr-3">
-                        <p className="text-xs font-mono font-bold text-primary truncate">{rec.otp || '—'}</p>
-                        <p className="text-[10px] text-muted-foreground mt-0.5 max-w-[120px] sm:max-w-[160px] truncate">
-                          {rec.sms ? rec.sms.substring(0, 60) + (rec.sms.length > 60 ? '…' : '') : '—'}
-                        </p>
-                      </td>
-                      <td className="py-3 pr-3">
-                        {/* Mobile: only the country portion before " - " */}
-                        <p className="text-xs font-medium text-foreground sm:hidden truncate max-w-[80px]">
+                        <CountdownTimer expiresAt={rec.expiresAt} status={effectiveStatus} />
+                      </div>
+                    </div>
+
+                    {/* OTP Codes — show all from otpList */}
+                    {rec.otpList && rec.otpList.length > 0 ? (
+                      <div className="mt-2 space-y-1.5">
+                        {rec.otpList.map((item, idx) => (
+                          <div key={idx}>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => handleCopy(item.otp)}
+                                className="inline-flex items-center gap-2 rounded-lg bg-primary/10 px-3 py-1.5 text-primary transition-colors hover:bg-primary/20 active:bg-primary/30"
+                              >
+                                <span className="font-mono text-base font-extrabold tracking-wider">{item.otp}</span>
+                                <span className="text-primary/70">
+                                  {copied === item.otp ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                                </span>
+                              </button>
+                              <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                                {new Date(item.receivedAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                              </span>
+                            </div>
+                            {item.sms && (
+                              <div className="flex items-center gap-1.5 mt-0.5 pl-1">
+                                <p className="text-[10px] text-muted-foreground line-clamp-1 flex-1 min-w-0">
+                                  {item.sms}
+                                </p>
+                                <button
+                                  onClick={() => handleCopy(item.sms)}
+                                  className={`p-1 rounded transition-all flex-shrink-0 ${
+                                    copied === item.sms ? 'text-emerald-600' : 'text-muted-foreground hover:text-primary'
+                                  }`}
+                                  title="Copy full message"
+                                >
+                                  {copied === item.sms ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : rec.otp ? (
+                      <div className="mt-2">
+                        <button
+                          onClick={() => handleCopy(rec.otp!)}
+                          className="inline-flex items-center gap-2 rounded-lg bg-primary/10 px-3 py-1.5 text-primary transition-colors hover:bg-primary/20 active:bg-primary/30"
+                        >
+                          <span className="font-mono text-base font-extrabold tracking-wider">{rec.otp}</span>
+                          <span className="text-primary/70">
+                            {copied === rec.otp ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                          </span>
+                        </button>
+                      </div>
+                    ) : null}
+
+                    {/* Bottom row: Country/Operator | Allocated Time */}
+                    <div className="flex items-center justify-between mt-2 gap-2">
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium text-foreground sm:hidden truncate">
                           {(rec.country || '—').split(' - ')[0]}
                         </p>
-                        {/* Desktop: full country + operator detail */}
                         <p className="hidden sm:block text-xs font-medium text-foreground truncate">{rec.country || '—'}</p>
-                        <p className="hidden sm:block text-[10px] text-muted-foreground truncate">{rec.operator || '—'}</p>
-                      </td>
-                      <td className="py-3">
-                        <CountdownTimer expiresAt={rec.expiresAt} status={effectiveStatus} />
-                        <p className="text-[10px] text-muted-foreground mt-0.5">
-                          {new Date(rec.allocatedAt).toLocaleString(undefined, {
-                            month: 'short', day: 'numeric',
-                            hour: '2-digit', minute: '2-digit',
-                          })}
+                        <p className="text-[10px] text-muted-foreground truncate">{rec.operator || '—'}</p>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground whitespace-nowrap flex-shrink-0">
+                        {new Date(rec.allocatedAt).toLocaleString(undefined, {
+                          month: 'short', day: 'numeric',
+                          hour: '2-digit', minute: '2-digit',
+                        })}
+                      </p>
+                    </div>
+
+                    {/* SMS text — only show if no otpList (legacy fallback) */}
+                    {rec.sms && (!rec.otpList || rec.otpList.length === 0) && (
+                      <div className="flex items-center gap-1.5 mt-1.5">
+                        <p className="text-[10px] text-muted-foreground line-clamp-1 flex-1 min-w-0">
+                          {rec.sms}
                         </p>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+                        <button
+                          onClick={() => handleCopy(rec.sms!)}
+                          className={`p-1 rounded transition-all flex-shrink-0 ${
+                            copied === rec.sms ? 'text-emerald-600' : 'text-muted-foreground hover:text-primary'
+                          }`}
+                          title="Copy full message"
+                        >
+                          {copied === rec.sms ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
 
         {/* Footer Controls */}

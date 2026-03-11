@@ -23,6 +23,7 @@ export default async function PaymentPageRoute() {
         currency={settings.currency || '৳'}
         paymentNetwork={settings.paymentNetwork || 'TRC20'}
         minimumWithdrawal={settings.minimumWithdrawal ?? 10}
+        paymentMethods={settings.paymentMethods ?? []}
       />
     </div>
   );

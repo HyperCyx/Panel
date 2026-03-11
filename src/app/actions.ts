@@ -1,15 +1,15 @@
 'use server';
 
 import { z } from 'zod';
-import { format, differenceInDays, startOfDay, endOfDay, subDays } from 'date-fns';
+import { format, differenceInDays, startOfDay, endOfDay, subDays, subHours } from 'date-fns';
 import { cookies } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import jwt from 'jsonwebtoken';
 import { HttpsProxyAgent } from 'https-proxy-agent';
-import { UserDB, SettingDB, AllocatedNumberDB, PaymentRequestDB, UserWalletDB } from '@/lib/database';
+import { UserDB, SettingDB, AllocatedNumberDB, PaymentRequestDB, UserWalletDB, NotificationDB } from '@/lib/database';
 import { User as UserModel } from '@/lib/models';
 import connectDB from '@/lib/mongodb';
-import type { FilterFormValues, SmsRecord, UserProfile, ProxySettings, ExtractedInfo, AdminSettings, PublicSettings, AccessListFilterFormValues, AccessListRecord, DashboardStats, AllocatedNumberInfo, PaymentRequestInfo, UserWalletInfo } from '@/lib/types';
+import type { FilterFormValues, SmsRecord, UserProfile, ProxySettings, ExtractedInfo, AdminSettings, PublicSettings, AccessListFilterFormValues, AccessListRecord, DashboardStats, AdminDashboardStats, AllocatedNumberInfo, PaymentRequestInfo, UserWalletInfo } from '@/lib/types';
 import { allColorKeys } from '@/lib/types';
 import { redirect } from 'next/navigation';
 
@@ -87,7 +87,7 @@ export async function fetchSmsData(
   
   const agent = await getProxyAgent();
 
-  const API_URL = 'https://api.premiumy.net/v1.0/csv';
+  const API_URL = 'https://api.iprn-elite.com/v1.0/csv';
   const body = {
     id: null,
     jsonrpc: '2.0',
@@ -112,6 +112,7 @@ export async function fetchSmsData(
         'Api-Key': apiKey,
       },
       body: JSON.stringify(body),
+      cache: 'no-store',
       // @ts-ignore - agent is not in standard fetch types
       agent,
     });
@@ -260,7 +261,21 @@ export async function fetchSmsData(
         });
     }
     
-    return { data: records };
+    // Filter out records from blocked apps
+    const publicSettings = await getPublicSettings();
+    const blockedApps: string[] = publicSettings.blockedApps || [];
+    const filteredRecords = blockedApps.length > 0
+        ? records.filter(r => {
+            const senderLower = (r.senderId || '').toLowerCase();
+            const messageLower = (r.message || '').toLowerCase();
+            return !blockedApps.some(app => {
+                const appLower = app.toLowerCase();
+                return senderLower.includes(appLower) || messageLower.includes(appLower);
+            });
+        })
+        : records;
+    
+    return { data: filteredRecords };
   } catch (err) {
     const error = err as Error;
     console.error('Failed to fetch SMS data:', error);
@@ -298,7 +313,7 @@ export async function fetchAccessListData(
   
   const agent = await getProxyAgent();
 
-  const API_URL = 'https://api.premiumy.net/v1.0/csv';
+  const API_URL = 'https://api.iprn-elite.com/v1.0/csv';
   const body = {
     id: null,
     jsonrpc: '2.0',
@@ -324,6 +339,7 @@ export async function fetchAccessListData(
         'Api-Key': apiKey,
       },
       body: JSON.stringify(body),
+      cache: 'no-store',
       // @ts-ignore - agent is not in standard fetch types
       agent,
     });
@@ -465,7 +481,17 @@ export async function fetchAccessListData(
         });
     }
     
-    return { data: records };
+    // Filter out records from blocked apps
+    const publicSettings = await getPublicSettings();
+    const blockedApps: string[] = publicSettings.blockedApps || [];
+    const filteredRecords = blockedApps.length > 0
+        ? records.filter(r => {
+            const originLower = (r.accessOrigin || '').toLowerCase();
+            return !blockedApps.some(app => originLower.includes(app.toLowerCase()));
+        })
+        : records;
+    
+    return { data: filteredRecords };
   } catch (err) {
     const error = err as Error;
     console.error('Failed to fetch access list data:', error);
@@ -601,7 +627,6 @@ export async function getCurrentUser(): Promise<UserProfile | null> {
             approvedBy: user.approvedBy,
             commissionRate: user.commissionRate ?? 0,
             agentWalletBalance: user.agentWalletBalance ?? 0,
-            privateNumberList: user.privateNumberList,
             walletBalance: user.walletBalance ?? 0,
             otpRate: user.otpRate ?? 0.50,
         };
@@ -675,6 +700,7 @@ export async function updateUserProfile(userId: string, values: z.infer<typeof u
 export async function getPublicSettings(): Promise<PublicSettings> {
     const defaultSettings: PublicSettings = {
         siteName: 'SMS Inspector 2.0',
+        siteVersion: '3.0.1',
         signupEnabled: true,
         emailChangeEnabled: true,
         footerText: '© {YEAR} {SITENAME}. All rights reserved.',
@@ -682,6 +708,11 @@ export async function getPublicSettings(): Promise<PublicSettings> {
         paymentWalletAddress: '',
         paymentNetwork: 'TRC20',
         minimumWithdrawal: 10,
+        otpCheckInterval: 5,
+        consoleRefreshInterval: 60,
+        defaultOrigins: ['Telegram', 'WhatsApp', 'Bitget', 'Binance', 'Google'],
+        blockedApps: [],
+        paymentMethods: [],
         colorPrimary: '217.2 91.2% 59.8%',
         colorPrimaryForeground: '210 20% 98%',
         colorBackground: '0 0% 100%',
@@ -713,6 +744,7 @@ export async function getPublicSettings(): Promise<PublicSettings> {
 
         return {
             siteName: settings.siteName ?? defaultSettings.siteName,
+            siteVersion: settings.siteVersion ?? defaultSettings.siteVersion,
             signupEnabled: settings.signupEnabled ?? defaultSettings.signupEnabled,
             emailChangeEnabled: settings.emailChangeEnabled ?? defaultSettings.emailChangeEnabled,
             footerText: settings.footerText ?? defaultSettings.footerText,
@@ -720,6 +752,11 @@ export async function getPublicSettings(): Promise<PublicSettings> {
             paymentWalletAddress: settings.paymentWalletAddress ?? defaultSettings.paymentWalletAddress,
             paymentNetwork: settings.paymentNetwork ?? defaultSettings.paymentNetwork,
             minimumWithdrawal: settings.minimumWithdrawal ?? defaultSettings.minimumWithdrawal,
+            otpCheckInterval: settings.otpCheckInterval ?? defaultSettings.otpCheckInterval,
+            consoleRefreshInterval: settings.consoleRefreshInterval ?? defaultSettings.consoleRefreshInterval,
+            defaultOrigins: settings.defaultOrigins ?? defaultSettings.defaultOrigins,
+            blockedApps: settings.blockedApps ?? defaultSettings.blockedApps,
+            paymentMethods: settings.paymentMethods ?? defaultSettings.paymentMethods,
             colorPrimary: settings.colorPrimary ?? defaultSettings.colorPrimary,
             colorBackground: settings.colorBackground ?? defaultSettings.colorBackground,
             colorForeground: settings.colorForeground ?? defaultSettings.colorForeground,
@@ -802,15 +839,20 @@ export async function getAdminSettings(): Promise<Partial<AdminSettings> & { err
             },
             signupEnabled: settings.signupEnabled ?? true,
             siteName: settings.siteName ?? 'SMS Inspector 2.0',
+            siteVersion: settings.siteVersion ?? '3.0.1',
             footerText: settings.footerText ?? '© {YEAR} {SITENAME}. All rights reserved.',
             emailChangeEnabled: settings.emailChangeEnabled ?? true,
-            numberList: settings.numberList ?? [],
             errorMappings: settings.errorMappings ?? [],
             numberExpiryMinutes: settings.numberExpiryMinutes ?? 5,
+            otpCheckInterval: settings.otpCheckInterval ?? 5,
+            consoleRefreshInterval: settings.consoleRefreshInterval ?? 60,
             currency: settings.currency ?? '৳',
             paymentWalletAddress: settings.paymentWalletAddress ?? '',
             paymentNetwork: settings.paymentNetwork ?? 'TRC20',
             minimumWithdrawal: settings.minimumWithdrawal ?? 10,
+            defaultOrigins: settings.defaultOrigins ?? ['Telegram', 'WhatsApp', 'Bitget', 'Binance', 'Google'],
+            blockedApps: settings.blockedApps ?? [],
+            paymentMethods: settings.paymentMethods ?? [],
             
             // Color settings with defaults
             colorPrimary: settings.colorPrimary ?? '217.2 91.2% 59.8%',
@@ -926,7 +968,7 @@ async function fetchRawSmsRecords(startDate: Date, endDate: Date): Promise<SmsRe
         const apiKey = await getApiKey();
         if (!apiKey) return [];
         const agent = await getProxyAgent();
-        const API_URL = 'https://api.premiumy.net/v1.0/csv';
+        const API_URL = 'https://api.iprn-elite.com/v1.0/csv';
         const PER_PAGE = 1000;
 
         const parseCsvToRecords = (csvText: string): SmsRecord[] => {
@@ -1049,10 +1091,116 @@ export async function getUserAllocatedNumbers(): Promise<{ data?: AllocatedNumbe
                 status: r.status,
                 otp: r.otp,
                 sms: r.sms,
+                otpList: r.otpList,
                 expiresAt: r.expiresAt,
                 allocatedAt: r.allocatedAt,
             })),
         };
+    } catch (err) {
+        return { error: (err as Error).message };
+    }
+}
+
+export async function checkNumberOtp(numberId: string): Promise<{ otp?: string; sms?: string; status?: string; otpList?: { otp: string; sms: string; receivedAt: string }[]; error?: string }> {
+    const user = await getCurrentUser();
+    if (!user) return { error: 'Not authenticated' };
+
+    try {
+        // Fetch the allocated number record
+        const records = await AllocatedNumberDB.findByUserId(user.id);
+        const record = records.find(r => r.id === numberId);
+        if (!record) return { error: 'Number not found' };
+        if (record.status === 'expired') return { status: 'expired', otpList: record.otpList };
+
+        // Check if expired
+        if (record.status === 'pending' && new Date(record.expiresAt).getTime() <= Date.now()) {
+            return { status: 'expired' };
+        }
+
+        // Query iprn-elite API to check if OTP/SMS arrived for this number
+        const apiKey = await getApiKey();
+        if (!apiKey) return { error: 'API key not configured' };
+
+        const agent = await getProxyAgent();
+        const API_URL = 'https://api.iprn-elite.com/v1.0';
+
+        const body = {
+            id: 1,
+            jsonrpc: '2.0',
+            method: 'sms.mdr_full:get_message_by_phone',
+            params: {
+                phone: record.number,
+            },
+        };
+
+        const response = await fetch(API_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Api-Key': apiKey,
+            },
+            body: JSON.stringify(body),
+            cache: 'no-store',
+            // @ts-ignore
+            agent,
+        });
+
+        if (!response.ok) return { status: record.status, otp: record.otp, sms: record.sms, otpList: record.otpList };
+
+        const jsonResponse = await response.json();
+
+        // If there's an error or no result, OTP hasn't arrived yet
+        if (jsonResponse.error || !jsonResponse.result) {
+            return { status: record.status, otp: record.otp, sms: record.sms, otpList: record.otpList };
+        }
+
+        const result = jsonResponse.result;
+        const smsMessage = result.message;
+
+        if (!smsMessage) return { status: record.status, otp: record.otp, sms: record.sms, otpList: record.otpList };
+
+        // Check if the sender is in the blocked apps list
+        const senderId = result.senderid || '';
+        const publicSettings = await getPublicSettings();
+        const blockedApps: string[] = publicSettings.blockedApps || [];
+        if (blockedApps.length > 0 && senderId) {
+            const senderLower = senderId.toLowerCase();
+            const messageLower = smsMessage.toLowerCase();
+            const isBlocked = blockedApps.some(app => {
+                const appLower = app.toLowerCase();
+                return senderLower.includes(appLower) || messageLower.includes(appLower);
+            });
+            if (isBlocked) {
+                return { status: record.status, otp: record.otp, sms: record.sms, otpList: record.otpList };
+            }
+        }
+
+        // Extract OTP/confirmation code from the message
+        const extracted = extractInfoWithoutAI(smsMessage);
+        const otp = extracted.confirmationCode || smsMessage.substring(0, 50);
+
+        // Check if this exact SMS is already stored (avoid duplicates)
+        const alreadyStored = (record.otpList || []).some(item => item.sms === smsMessage);
+        if (alreadyStored) {
+            return { status: record.status, otp: record.otp, sms: record.sms, otpList: record.otpList };
+        }
+
+        if (record.status === 'pending') {
+            // First OTP — transition pending→success and charge
+            const updated = await AllocatedNumberDB.updateOtp(numberId, user.id, otp, smsMessage);
+            if (updated) {
+                await creditAllocationEarnings(user.id);
+                return { status: 'success', otp, sms: smsMessage, otpList: updated.otpList };
+            }
+        } else if (record.status === 'success') {
+            // Subsequent OTP — append without charging
+            const updated = await AllocatedNumberDB.appendOtp(numberId, user.id, otp, smsMessage);
+            if (updated) {
+                return { status: 'success', otp, sms: smsMessage, otpList: updated.otpList };
+            }
+        }
+
+        return { status: record.status, otp: record.otp, sms: record.sms, otpList: record.otpList };
     } catch (err) {
         return { error: (err as Error).message };
     }
@@ -1067,21 +1215,29 @@ export async function getDashboardStats(): Promise<{ data?: DashboardStats; erro
     if (!user) return { error: 'Not authenticated' };
     try {
         const now = new Date();
+        const todayStart = startOfDay(now);
+        const todayEnd = endOfDay(now);
+        const yesterdayStart = startOfDay(subDays(now, 1));
+        const yesterdayEnd = endOfDay(subDays(now, 1));
+        const weekStart = startOfDay(subDays(now, 6));
 
-        // Fetch each date range directly via API — no client-side date filtering needed.
-        // This avoids issues with API date format, timezone offsets, and page truncation.
+        // All counts come from the user's allocated numbers in the database
         const [
-            todayRecords,
-            yesterdayRecords,
-            weekRecords,
+            todayOtpCount,
+            yesterdayOtpCount,
+            todayNumbers,
+            yesterdayNumbers,
             totalAllocatedNumbers,
             todayAllocatedNumbers,
+            weekDailyCounts,
         ] = await Promise.all([
-            fetchRawSmsRecords(startOfDay(now), endOfDay(now)),
-            fetchRawSmsRecords(startOfDay(subDays(now, 1)), endOfDay(subDays(now, 1))),
-            fetchRawSmsRecords(startOfDay(subDays(now, 6)), endOfDay(now)),
+            AllocatedNumberDB.countByUserIdInRange(user.id, todayStart, todayEnd, 'success'),
+            AllocatedNumberDB.countByUserIdInRange(user.id, yesterdayStart, yesterdayEnd, 'success'),
+            AllocatedNumberDB.countByUserIdInRange(user.id, todayStart, todayEnd),
+            AllocatedNumberDB.countByUserIdInRange(user.id, yesterdayStart, yesterdayEnd),
             AllocatedNumberDB.countByUserId(user.id),
             AllocatedNumberDB.countByUserIdToday(user.id),
+            AllocatedNumberDB.getDailyCounts(user.id, weekStart, todayEnd),
         ]);
 
         // Build 7-day trend map (oldest→newest)
@@ -1089,12 +1245,10 @@ export async function getDashboardStats(): Promise<{ data?: DashboardStats; erro
         for (let i = 6; i >= 0; i--) {
             weekTrendMap[format(subDays(now, i), 'MM/dd')] = 0;
         }
-        for (const record of weekRecords) {
-            const raw = record.dateTime.substring(0, 10);
-            try {
-                const key = format(new Date(raw + 'T00:00:00'), 'MM/dd');
-                if (key in weekTrendMap) weekTrendMap[key]++;
-            } catch { /* skip malformed dates */ }
+        for (const entry of weekDailyCounts) {
+            if (entry.date in weekTrendMap) {
+                weekTrendMap[entry.date] = entry.count;
+            }
         }
         const weekTrend = Object.entries(weekTrendMap).map(([date, count]) => ({ date, count }));
 
@@ -1102,15 +1256,92 @@ export async function getDashboardStats(): Promise<{ data?: DashboardStats; erro
             data: {
                 walletBalance: user.walletBalance ?? 0,
                 otpRate: user.otpRate ?? 0.50,
-                todayOtpCount: todayRecords.length,
-                yesterdayOtpCount: yesterdayRecords.length,
-                todayNumbers: new Set(todayRecords.map(r => r.phone).filter(Boolean)).size,
-                yesterdayNumbers: new Set(yesterdayRecords.map(r => r.phone).filter(Boolean)).size,
-                todaySuccess: todayRecords.filter(r => r.extractedInfo?.confirmationCode).length,
-                yesterdaySuccess: yesterdayRecords.filter(r => r.extractedInfo?.confirmationCode).length,
+                todayOtpCount,
+                yesterdayOtpCount,
+                todayNumbers,
+                yesterdayNumbers,
+                todaySuccess: todayOtpCount,
+                yesterdaySuccess: yesterdayOtpCount,
                 weekTrend,
                 totalAllocatedNumbers,
                 todayAllocatedNumbers,
+            },
+        };
+    } catch (err) {
+        return { error: (err as Error).message };
+    }
+}
+
+export async function getAdminDashboardStats(): Promise<{ data?: AdminDashboardStats; error?: string }> {
+    const user = await getCurrentUser();
+    if (!user?.isAdmin) return { error: 'Not authorized' };
+    try {
+        const now = new Date();
+        const todayStart = startOfDay(now);
+        const todayEnd = endOfDay(now);
+        const yesterdayStart = startOfDay(subDays(now, 1));
+        const yesterdayEnd = endOfDay(subDays(now, 1));
+        const weekStart = startOfDay(subDays(now, 6));
+
+        const [
+            totalUsers,
+            activeUsers,
+            blockedUsers,
+            todayNumbersAll,
+            todaySuccessAll,
+            yesterdayNumbersAll,
+            yesterdaySuccessAll,
+            totalNumbersAll,
+            pendingPaymentsAmount,
+            pendingPaymentsCount,
+            approvedPaymentsAmount,
+            approvedPaymentsCount,
+            totalUserBalances,
+            weekDailyCounts,
+        ] = await Promise.all([
+            UserDB.countAll(),
+            UserDB.countActive(),
+            UserDB.countBlocked(),
+            AllocatedNumberDB.countAllInRange(todayStart, todayEnd),
+            AllocatedNumberDB.countAllInRange(todayStart, todayEnd, 'success'),
+            AllocatedNumberDB.countAllInRange(yesterdayStart, yesterdayEnd),
+            AllocatedNumberDB.countAllInRange(yesterdayStart, yesterdayEnd, 'success'),
+            AllocatedNumberDB.countAll(),
+            PaymentRequestDB.sumByStatus('pending'),
+            PaymentRequestDB.countByStatus('pending'),
+            PaymentRequestDB.sumByStatus('approved'),
+            PaymentRequestDB.countByStatus('approved'),
+            UserDB.sumWalletBalances(),
+            AllocatedNumberDB.getDailyCountsAll(weekStart, todayEnd),
+        ]);
+
+        const weekTrendMap: Record<string, number> = {};
+        for (let i = 6; i >= 0; i--) {
+            weekTrendMap[format(subDays(now, i), 'MM/dd')] = 0;
+        }
+        for (const entry of weekDailyCounts) {
+            if (entry.date in weekTrendMap) {
+                weekTrendMap[entry.date] = entry.count;
+            }
+        }
+        const weekTrend = Object.entries(weekTrendMap).map(([date, count]) => ({ date, count }));
+
+        return {
+            data: {
+                totalUsers,
+                activeUsers,
+                blockedUsers,
+                todayNumbersAll,
+                todaySuccessAll,
+                yesterdayNumbersAll,
+                yesterdaySuccessAll,
+                totalNumbersAll,
+                pendingPaymentsAmount,
+                pendingPaymentsCount,
+                approvedPaymentsAmount,
+                approvedPaymentsCount,
+                totalUserBalances,
+                weekTrend,
             },
         };
     } catch (err) {
@@ -1172,17 +1403,15 @@ async function creditAllocationEarnings(userId: string) {
         const otpRate = fullUser.otpRate ?? 0;
         if (otpRate <= 0) return;
 
-        // Credit user wallet
-        await UserDB.updateById(userId, { walletBalance: (fullUser.walletBalance ?? 0) + otpRate });
+        // Atomic increment — safe under concurrent access
+        await UserDB.incrementBalance(userId, 'walletBalance', otpRate);
 
         // Credit agent commission if user has an agent
         if (fullUser.agentEmail) {
             const agent = await UserDB.findByEmail(fullUser.agentEmail);
             if (agent && agent.isAgent && (agent.commissionRate ?? 0) > 0) {
                 const commission = (otpRate * (agent.commissionRate ?? 0)) / 100;
-                await UserDB.updateById(agent.id, {
-                    agentWalletBalance: (agent.agentWalletBalance ?? 0) + commission,
-                } as any);
+                await UserDB.incrementBalance(agent.id, 'agentWalletBalance', commission);
             }
         }
     } catch (e) {
@@ -1325,9 +1554,6 @@ export async function allocateNumber(template: string): Promise<{ success?: bool
                         expiresAt,
                     });
 
-                    // Credit user wallet and agent commission
-                    await creditAllocationEarnings(user.id);
-
                     revalidatePath('/dashboard');
                     return {
                         success: true,
@@ -1359,9 +1585,6 @@ export async function allocateNumber(template: string): Promise<{ success?: bool
                     expiresAt,
                 });
 
-                // Credit user wallet and agent commission
-                await creditAllocationEarnings(user.id);
-
                 revalidatePath('/dashboard');
                 return {
                     success: true,
@@ -1387,9 +1610,6 @@ export async function allocateNumber(template: string): Promise<{ success?: bool
                         transactionId: result.id || '',
                         expiresAt,
                     });
-
-                    // Credit user wallet and agent commission
-                    await creditAllocationEarnings(user.id);
 
                     revalidatePath('/dashboard');
                     return {
@@ -1444,6 +1664,12 @@ export async function createPaymentRequest(data: {
     }
 
     try {
+        // Atomic deduct first — fails if balance dropped below amount since validation
+        const updated = await UserDB.deductBalance(user.id, 'walletBalance', data.amount);
+        if (!updated) {
+            return { error: 'Insufficient balance.' };
+        }
+
         await PaymentRequestDB.create({
             userId: user.id,
             userName: user.name || 'Unknown',
@@ -1454,8 +1680,6 @@ export async function createPaymentRequest(data: {
             network: data.walletType.trim(),
         });
 
-        // Deduct from user balance
-        await UserDB.updateById(user.id, { walletBalance: walletBalance - data.amount });
         revalidatePath('/dashboard');
         revalidatePath('/dashboard/payment');
         return { success: true };
@@ -1506,13 +1730,9 @@ export async function updatePaymentStatus(
             if (targetUser) {
                 const isAgentWithdrawal = payment.userName?.endsWith('(Agent)');
                 if (isAgentWithdrawal) {
-                    await UserDB.updateById(payment.userId, {
-                        agentWalletBalance: (targetUser.agentWalletBalance ?? 0) + payment.amount,
-                    });
+                    await UserDB.incrementBalance(payment.userId, 'agentWalletBalance', payment.amount);
                 } else {
-                    await UserDB.updateById(payment.userId, {
-                        walletBalance: (targetUser.walletBalance ?? 0) + payment.amount,
-                    });
+                    await UserDB.incrementBalance(payment.userId, 'walletBalance', payment.amount);
                 }
             }
         }
@@ -1534,7 +1754,7 @@ export async function getUserWallets(): Promise<{ data?: UserWalletInfo; error?:
 
     try {
         const wallets = await UserWalletDB.findByUserId(user.id);
-        return { data: wallets || { bkash: '', nagad: '', rocket: '', binance: '' } };
+        return { data: wallets || {} };
     } catch (err) {
         return { error: (err as Error).message };
     }
@@ -1545,12 +1765,11 @@ export async function saveUserWallets(wallets: UserWalletInfo): Promise<{ succes
     if (!user) return { error: 'Not authenticated' };
 
     try {
-        await UserWalletDB.upsert(user.id, {
-            bkash: (wallets.bkash || '').trim(),
-            nagad: (wallets.nagad || '').trim(),
-            rocket: (wallets.rocket || '').trim(),
-            binance: (wallets.binance || '').trim(),
-        });
+        const sanitized: Record<string, string> = {};
+        for (const [key, value] of Object.entries(wallets)) {
+            sanitized[key] = (value || '').trim();
+        }
+        await UserWalletDB.upsert(user.id, sanitized);
         return { success: true };
     } catch (err) {
         return { error: (err as Error).message };
@@ -1808,6 +2027,12 @@ export async function createAgentWithdrawal(amount: number, walletAddress: strin
 
         const settings = await SettingDB.getAll();
 
+        // Atomic deduct first — fails if balance dropped below amount since validation
+        const updated = await UserDB.deductBalance(agent.id, 'agentWalletBalance', amount);
+        if (!updated) {
+            return { error: 'Insufficient commission balance.' };
+        }
+
         // Create payment request for agent
         await PaymentRequestDB.create({
             userId: agent.id,
@@ -1817,11 +2042,6 @@ export async function createAgentWithdrawal(amount: number, walletAddress: strin
             currency: settings.currency ?? '৳',
             walletAddress: walletAddress.trim(),
             network: walletType.trim(),
-        });
-
-        // Deduct from agent wallet balance
-        await UserDB.updateById(agent.id, {
-            agentWalletBalance: (agent.agentWalletBalance ?? 0) - amount,
         });
 
         revalidatePath('/agent');
@@ -1845,6 +2065,124 @@ export async function updateAgentCommissionRate(agentId: string, commissionRate:
         return { success: true };
     } catch (error) {
         console.error('Update agent commission error:', error);
+        return { error: 'An unexpected error occurred.' };
+    }
+}
+
+
+// --- Notification Actions ---
+
+export async function createNotification(title: string, message: string): Promise<{ success?: boolean; error?: string }> {
+    try {
+        const currentUser = await getCurrentUser();
+        if (!currentUser?.isAdmin) return { error: 'Unauthorized' };
+
+        const trimmedTitle = title.trim();
+        const trimmedMessage = message.trim();
+        if (!trimmedTitle || !trimmedMessage) return { error: 'Title and message are required.' };
+
+        await NotificationDB.create({
+            title: trimmedTitle,
+            message: trimmedMessage,
+            createdBy: currentUser.email || currentUser.id,
+        });
+
+        revalidatePath('/dashboard/notifications');
+        return { success: true };
+    } catch (error) {
+        console.error('Create notification error:', error);
+        return { error: 'An unexpected error occurred.' };
+    }
+}
+
+export async function getNotifications(): Promise<{ data?: { id: string; title: string; message: string; createdBy: string; isRead: boolean; createdAt: string }[]; error?: string }> {
+    try {
+        const currentUser = await getCurrentUser();
+        if (!currentUser) return { error: 'Not authenticated' };
+
+        const notifications = await NotificationDB.getAll(100);
+        const data = notifications.map(n => ({
+            id: n.id,
+            title: n.title,
+            message: n.message,
+            createdBy: n.createdBy,
+            isRead: n.readBy.includes(currentUser.id),
+            createdAt: n.createdAt.toISOString(),
+        }));
+
+        return { data };
+    } catch (error) {
+        console.error('Get notifications error:', error);
+        return { error: 'An unexpected error occurred.' };
+    }
+}
+
+export async function getUnreadNotificationCount(): Promise<{ count: number }> {
+    try {
+        const currentUser = await getCurrentUser();
+        if (!currentUser) return { count: 0 };
+        const count = await NotificationDB.getUnreadCount(currentUser.id);
+        return { count };
+    } catch {
+        return { count: 0 };
+    }
+}
+
+export async function markNotificationAsRead(notificationId: string): Promise<{ success?: boolean; error?: string }> {
+    try {
+        const currentUser = await getCurrentUser();
+        if (!currentUser) return { error: 'Not authenticated' };
+        await NotificationDB.markAsRead(notificationId, currentUser.id);
+        return { success: true };
+    } catch (error) {
+        console.error('Mark notification read error:', error);
+        return { error: 'An unexpected error occurred.' };
+    }
+}
+
+export async function markAllNotificationsAsRead(): Promise<{ success?: boolean; error?: string }> {
+    try {
+        const currentUser = await getCurrentUser();
+        if (!currentUser) return { error: 'Not authenticated' };
+        await NotificationDB.markAllAsRead(currentUser.id);
+        return { success: true };
+    } catch (error) {
+        console.error('Mark all notifications read error:', error);
+        return { error: 'An unexpected error occurred.' };
+    }
+}
+
+export async function deleteNotification(notificationId: string): Promise<{ success?: boolean; error?: string }> {
+    try {
+        const currentUser = await getCurrentUser();
+        if (!currentUser?.isAdmin) return { error: 'Unauthorized' };
+        await NotificationDB.deleteById(notificationId);
+        revalidatePath('/admin');
+        return { success: true };
+    } catch (error) {
+        console.error('Delete notification error:', error);
+        return { error: 'An unexpected error occurred.' };
+    }
+}
+
+export async function getAdminNotifications(): Promise<{ data?: { id: string; title: string; message: string; createdBy: string; readCount: number; createdAt: string }[]; error?: string }> {
+    try {
+        const currentUser = await getCurrentUser();
+        if (!currentUser?.isAdmin) return { error: 'Unauthorized' };
+
+        const notifications = await NotificationDB.getAll(100);
+        const data = notifications.map(n => ({
+            id: n.id,
+            title: n.title,
+            message: n.message,
+            createdBy: n.createdBy,
+            readCount: n.readBy.length,
+            createdAt: n.createdAt.toISOString(),
+        }));
+
+        return { data };
+    } catch (error) {
+        console.error('Get admin notifications error:', error);
         return { error: 'An unexpected error occurred.' };
     }
 }

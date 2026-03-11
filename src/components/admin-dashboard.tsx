@@ -3,29 +3,37 @@
 import { useState, useRef } from 'react';
 import {
   Menu, X, Users, Palette, AlertTriangle, Settings, CreditCard,
-  LogOut, LayoutDashboard, Globe, UserCheck,
+  LogOut, LayoutDashboard, Globe, UserCheck, BarChart3, ShieldOff, Banknote, Bell,
 } from 'lucide-react';
 import { adminLogout } from '@/app/actions';
+import { OverviewTab } from './admin/overview-tab';
 import { UserManagementTab } from './admin/user-management-tab';
 import { ErrorManagementTab } from './admin/error-management-tab';
 import { SettingsTab } from './admin/settings-tab';
 import { AppearanceTab } from './admin/appearance-tab';
 import { PaymentManagementTab } from './admin/payment-management-tab';
 import { AgentManagementTab } from './admin/agent-management-tab';
+import { BlockedAppsTab } from './admin/blocked-apps-tab';
+import { PaymentMethodsTab } from './admin/payment-methods-tab';
+import { NotificationsTab } from './admin/notifications-tab';
 import Link from 'next/link';
 import { useSettings } from '@/contexts/settings-provider';
 
 const ADMIN_NAV = [
-  { id: 'users',      label: 'Users',          icon: Users },
-  { id: 'agents',     label: 'Agents',         icon: UserCheck },
-  { id: 'payments',   label: 'Payments',       icon: CreditCard },
-  { id: 'appearance', label: 'Appearance',     icon: Palette },
-  { id: 'errors',     label: 'Custom Errors',  icon: AlertTriangle },
-  { id: 'settings',   label: 'Settings',       icon: Settings },
+  { id: 'overview',    label: 'Overview',       icon: BarChart3 },
+  { id: 'users',       label: 'Users',          icon: Users },
+  { id: 'agents',      label: 'Agents',         icon: UserCheck },
+  { id: 'payments',    label: 'Payments',       icon: CreditCard },
+  { id: 'paymentMethods', label: 'Payment Methods', icon: Banknote },
+  { id: 'notifications', label: 'Notifications',   icon: Bell },
+  { id: 'appearance',  label: 'Appearance',     icon: Palette },
+  { id: 'blockedApps', label: 'Blocked Apps',   icon: ShieldOff },
+  { id: 'errors',      label: 'Custom Errors',  icon: AlertTriangle },
+  { id: 'settings',    label: 'Settings',       icon: Settings },
 ];
 
 export function AdminDashboard() {
-  const [activeTab, setActiveTab] = useState('users');
+  const [activeTab, setActiveTab] = useState('overview');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const logoutFormRef = useRef<HTMLFormElement>(null);
   const { siteName, footerText } = useSettings();
@@ -36,13 +44,17 @@ export function AdminDashboard() {
 
   const renderContent = () => {
     switch (activeTab) {
+      case 'overview': return <OverviewTab />;
       case 'users': return <UserManagementTab />;
       case 'agents': return <AgentManagementTab />;
       case 'payments': return <PaymentManagementTab />;
+      case 'paymentMethods': return <PaymentMethodsTab />;
+      case 'notifications': return <NotificationsTab />;
       case 'appearance': return <AppearanceTab />;
+      case 'blockedApps': return <BlockedAppsTab />;
       case 'errors': return <ErrorManagementTab />;
       case 'settings': return <SettingsTab />;
-      default: return <UserManagementTab />;
+      default: return <OverviewTab />;
     }
   };
 
