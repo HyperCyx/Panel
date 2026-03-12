@@ -103,10 +103,15 @@ async function connectDB() {
             bufferCommands: false,
             serverSelectionTimeoutMS: 10000,
             socketTimeoutMS: 45000,
+            // Optimize for serverless: use smaller connection pool
+            maxPoolSize: 10,
+            minPoolSize: 1,
+            maxIdleTimeMS: 30000,
         };
 
         cached.promise = mongoose.connect(MONGODB_URI!, opts).then(async (mongoose) => {
-            await seedDatabase();
+            // Run seeding in background to not block the first request
+            seedDatabase().catch(err => console.error('Seeding error:', err));
             return mongoose;
         }).catch((err) => {
             // Reset the cached promise so the next call retries the connection

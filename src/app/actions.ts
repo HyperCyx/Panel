@@ -4,8 +4,9 @@ import { z } from 'zod';
 import { format, differenceInDays, startOfDay, endOfDay, subDays, subHours } from 'date-fns';
 import { cookies } from 'next/headers';
 import { revalidatePath } from 'next/cache';
+import { cache } from 'react';
 import jwt from 'jsonwebtoken';
-import { HttpsProxyAgent } from 'https-proxy-agent';
+import { ProxyAgent } from 'undici';
 import { UserDB, SettingDB, AllocatedNumberDB, PaymentRequestDB, UserWalletDB, NotificationDB } from '@/lib/database';
 import { User as UserModel } from '@/lib/models';
 import connectDB from '@/lib/mongodb';
@@ -14,6 +15,24 @@ import { allColorKeys } from '@/lib/types';
 import { redirect } from 'next/navigation';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-default-secret-key-change-this';
+
+// --- In-memory cache for settings (avoids MongoDB round-trip on every request) ---
+let _settingsCache: { data: Record<string, any>; ts: number } | null = null;
+const SETTINGS_CACHE_TTL = 30_000; // 30 seconds
+
+async function getCachedSettings(): Promise<Record<string, any>> {
+  const now = Date.now();
+  if (_settingsCache && now - _settingsCache.ts < SETTINGS_CACHE_TTL) {
+    return _settingsCache.data;
+  }
+  const data = await SettingDB.getAll();
+  _settingsCache = { data, ts: now };
+  return data;
+}
+
+export async function invalidateSettingsCache() {
+  _settingsCache = null;
+}
 
 const filterSchema = z.object({
   startDate: z.date({ required_error: 'Start date is required' }),
@@ -42,22 +61,58 @@ const filterSchema = z.object({
 });
 
 async function getApiKey(): Promise<string> {
-  return await SettingDB.get('apiKey') || '';
+  const settings = await getCachedSettings();
+  return settings.apiKey || '';
 }
 
-async function getProxyAgent(): Promise<HttpsProxyAgent<string> | undefined> {
-    const proxy = await SettingDB.get('proxySettings') as ProxySettings;
+// --- Cached proxy dispatcher (avoids recreating on every API call) ---
+let _proxyDispatcherCache: { dispatcher: ProxyAgent | undefined; ts: number; proxyUrl: string } | null = null;
+const PROXY_CACHE_TTL = 60_000; // 60 seconds
+
+async function getProxyDispatcher(): Promise<ProxyAgent | undefined> {
+    const now = Date.now();
+    if (_proxyDispatcherCache && now - _proxyDispatcherCache.ts < PROXY_CACHE_TTL) {
+        return _proxyDispatcherCache.dispatcher;
+    }
+
+    const settings = await getCachedSettings();
+    const proxy = settings.proxySettings as ProxySettings;
     if (!proxy || !proxy.ip || !proxy.port) {
+        _proxyDispatcherCache = { dispatcher: undefined, ts: now, proxyUrl: '' };
         return undefined;
     }
-    const auth = proxy.username && proxy.password ? `${proxy.username}:${proxy.password}@` : '';
+    const auth = proxy.username && proxy.password ? `${encodeURIComponent(proxy.username)}:${encodeURIComponent(proxy.password)}@` : '';
     const proxyUrl = `http://${auth}${proxy.ip}:${proxy.port}`;
-    return new HttpsProxyAgent(proxyUrl);
+
+    // Reuse if proxy URL hasn't changed
+    if (_proxyDispatcherCache && _proxyDispatcherCache.proxyUrl === proxyUrl && _proxyDispatcherCache.dispatcher) {
+        _proxyDispatcherCache.ts = now;
+        return _proxyDispatcherCache.dispatcher;
+    }
+
+    const dispatcher = new ProxyAgent(proxyUrl);
+    _proxyDispatcherCache = { dispatcher, ts: now, proxyUrl };
+    return dispatcher;
+}
+
+/** Fetch wrapper that correctly uses proxy via undici dispatcher */
+async function fetchWithProxy(url: string, options: RequestInit): Promise<Response> {
+    const dispatcher = await getProxyDispatcher();
+    if (dispatcher) {
+        // Use undici's fetch with the proxy dispatcher
+        const { fetch: undiciFetch } = await import('undici');
+        return undiciFetch(url, {
+            ...options as any,
+            dispatcher,
+        }) as unknown as Response;
+    }
+    return fetch(url, options);
 }
 
 async function getErrorMappings(): Promise<Record<string, string>> {
     try {
-        const mappings = await SettingDB.get('errorMappings') as { reasonCode: string; customMessage: string }[] || [];
+        const settings = await getCachedSettings();
+        const mappings = settings.errorMappings as { reasonCode: string; customMessage: string }[] || [];
         return mappings.reduce((acc: Record<string, string>, mapping) => {
             if (mapping.reasonCode && mapping.customMessage) {
                 acc[mapping.reasonCode] = mapping.customMessage;
@@ -85,8 +140,6 @@ export async function fetchSmsData(
     return { error: validation.error.errors.map((e) => e.message).join(', ') };
   }
   
-  const agent = await getProxyAgent();
-
   const API_URL = 'https://api.iprn-elite.com/v1.0/csv';
   const body = {
     id: null,
@@ -105,7 +158,7 @@ export async function fetchSmsData(
   };
 
   try {
-    const response = await fetch(API_URL, {
+    const response = await fetchWithProxy(API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -113,8 +166,6 @@ export async function fetchSmsData(
       },
       body: JSON.stringify(body),
       cache: 'no-store',
-      // @ts-ignore - agent is not in standard fetch types
-      agent,
     });
 
     if (!response.ok) {
@@ -310,8 +361,6 @@ export async function fetchAccessListData(
   if (!apiKey) {
     return { error: 'API key is not configured. Please set it in the admin panel.' };
   }
-  
-  const agent = await getProxyAgent();
 
   const API_URL = 'https://api.iprn-elite.com/v1.0/csv';
   const body = {
@@ -332,7 +381,7 @@ export async function fetchAccessListData(
   };
 
   try {
-    const response = await fetch(API_URL, {
+    const response = await fetchWithProxy(API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -340,8 +389,6 @@ export async function fetchAccessListData(
       },
       body: JSON.stringify(body),
       cache: 'no-store',
-      // @ts-ignore - agent is not in standard fetch types
-      agent,
     });
 
     if (!response.ok) {
@@ -502,8 +549,8 @@ export async function fetchAccessListData(
 // --- Auth Actions ---
 
 export async function getSignupStatus() {
-    const signupEnabled = await SettingDB.get('signupEnabled');
-    return { signupEnabled: signupEnabled !== false };
+    const settings = await getCachedSettings();
+    return { signupEnabled: settings.signupEnabled !== false };
 }
 
 const signupSchema = z.object({
@@ -604,7 +651,7 @@ export async function logout() {
     redirect('/');
 }
 
-export async function getCurrentUser(): Promise<UserProfile | null> {
+export const getCurrentUser = cache(async (): Promise<UserProfile | null> => {
     const token = cookies().get('token')?.value;
     if (!token) return null;
 
@@ -633,7 +680,7 @@ export async function getCurrentUser(): Promise<UserProfile | null> {
     } catch (error) {
         return null;
     }
-}
+});
 
 
 // --- User Profile Actions ---
@@ -654,7 +701,7 @@ export async function updateUserProfile(userId: string, values: z.infer<typeof u
             return { error: 'User not found.' };
         }
 
-        const emailChangeEnabled = await SettingDB.get('emailChangeEnabled') !== false;
+        const emailChangeEnabled = (await getCachedSettings()).emailChangeEnabled !== false;
 
         if (user.email !== values.email && !emailChangeEnabled) {
             return { error: 'Email address cannot be changed at this time.' };
@@ -696,8 +743,8 @@ export async function updateUserProfile(userId: string, values: z.infer<typeof u
 }
 
 
-// --- Public Site Settings ---
-export async function getPublicSettings(): Promise<PublicSettings> {
+// --- Public Site Settings (React cache() deduplicates within a single request) ---
+export const getPublicSettings = cache(async (): Promise<PublicSettings> => {
     const defaultSettings: PublicSettings = {
         siteName: 'SMS Inspector 2.0',
         siteVersion: '3.0.1',
@@ -740,7 +787,7 @@ export async function getPublicSettings(): Promise<PublicSettings> {
     };
 
     try {
-           const settings = await SettingDB.getAll();
+        const settings = await getCachedSettings();
 
         return {
             siteName: settings.siteName ?? defaultSettings.siteName,
@@ -786,7 +833,7 @@ export async function getPublicSettings(): Promise<PublicSettings> {
         console.error("Error fetching public settings:", error);
         return defaultSettings;
     }
-}
+});
 
 
 // --- Admin Actions ---
@@ -795,17 +842,17 @@ async function testProxy(proxy: ProxySettings): Promise<boolean> {
     return true; // No proxy to test, so we can save this "empty" configuration.
   }
   try {
-    const auth = proxy.username && proxy.password ? `${proxy.username}:${proxy.password}@` : '';
+    const auth = proxy.username && proxy.password ? `${encodeURIComponent(proxy.username)}:${encodeURIComponent(proxy.password)}@` : '';
     const proxyUrl = `http://${auth}${proxy.ip}:${proxy.port}`;
-    const agent = new HttpsProxyAgent(proxyUrl);
+    const dispatcher = new ProxyAgent(proxyUrl);
     
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000);
-    
-    const response = await fetch('https://httpbin.org/get', { 
-        // @ts-ignore - agent is not in standard fetch types
-        agent,
-        signal: controller.signal
+
+    const { fetch: undiciFetch } = await import('undici');
+    const response = await undiciFetch('https://httpbin.org/get', {
+        dispatcher,
+        signal: controller.signal,
     });
     
     clearTimeout(timeoutId);
@@ -821,7 +868,7 @@ export async function getAdminSettings(): Promise<Partial<AdminSettings> & { err
         const currentUser = await getCurrentUser();
         if (!currentUser?.isAdmin) return { error: 'Unauthorized' };
 
-    const settings = await SettingDB.getAll();
+    const settings = await getCachedSettings();
 
         const defaultProxy = { ip: '', port: '', username: '', password: '' };
         const rawProxy = settings.proxySettings;
@@ -908,6 +955,9 @@ export async function updateAdminSettings(settings: Partial<AdminSettings>) {
         }
 
             await SettingDB.setMany(settingsToSave);
+        // Invalidate caches so new settings take effect immediately
+        invalidateSettingsCache();
+        _proxyDispatcherCache = null;
         return { success: true };
     } catch (error) {
         return { error: (error as Error).message };
@@ -967,7 +1017,6 @@ async function fetchRawSmsRecords(startDate: Date, endDate: Date): Promise<SmsRe
     try {
         const apiKey = await getApiKey();
         if (!apiKey) return [];
-        const agent = await getProxyAgent();
         const API_URL = 'https://api.iprn-elite.com/v1.0/csv';
         const PER_PAGE = 1000;
 
@@ -1050,12 +1099,10 @@ async function fetchRawSmsRecords(startDate: Date, endDate: Date): Promise<SmsRe
                     per_page: PER_PAGE,
                 },
             };
-            const response = await fetch(API_URL, {
+            const response = await fetchWithProxy(API_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Api-Key': apiKey },
                 body: JSON.stringify(body),
-                // @ts-ignore
-                agent,
             });
             if (!response.ok) break;
             const csvText = await response.text();
@@ -1121,7 +1168,6 @@ export async function checkNumberOtp(numberId: string): Promise<{ otp?: string; 
         const apiKey = await getApiKey();
         if (!apiKey) return { error: 'API key not configured' };
 
-        const agent = await getProxyAgent();
         const API_URL = 'https://api.iprn-elite.com/v1.0';
 
         const body = {
@@ -1133,7 +1179,7 @@ export async function checkNumberOtp(numberId: string): Promise<{ otp?: string; 
             },
         };
 
-        const response = await fetch(API_URL, {
+        const response = await fetchWithProxy(API_URL, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -1141,8 +1187,6 @@ export async function checkNumberOtp(numberId: string): Promise<{ otp?: string; 
             },
             body: JSON.stringify(body),
             cache: 'no-store',
-            // @ts-ignore
-            agent,
         });
 
         if (!response.ok) return { status: record.status, otp: record.otp, sms: record.sms, otpList: record.otpList };
@@ -1207,7 +1251,8 @@ export async function checkNumberOtp(numberId: string): Promise<{ otp?: string; 
 }
 
 export async function getNumberExpiryMinutes(): Promise<number> {
-    return (await SettingDB.get('numberExpiryMinutes')) ?? 5;
+    const settings = await getCachedSettings();
+    return settings.numberExpiryMinutes ?? 5;
 }
 
 export async function getDashboardStats(): Promise<{ data?: DashboardStats; error?: string }> {
@@ -1434,11 +1479,11 @@ export async function allocateNumber(template: string): Promise<{ success?: bool
         return { error: 'Please enter a valid range template.' };
     }
 
-    const agent = await getProxyAgent();
     const API_URL = 'https://api.iprn-elite.com/v1.0';
 
     // Get expiry minutes from admin settings (default 5)
-    const expiryMinutes = (await SettingDB.get('numberExpiryMinutes')) ?? 5;
+    const settings = await getCachedSettings();
+    const expiryMinutes = settings.numberExpiryMinutes ?? 5;
 
     const body = {
         id: null,
@@ -1455,15 +1500,13 @@ export async function allocateNumber(template: string): Promise<{ success?: bool
     };
 
     try {
-        const response = await fetch(API_URL, {
+        const response = await fetchWithProxy(API_URL, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Api-Key': apiKey,
             },
             body: JSON.stringify(body),
-            // @ts-ignore - agent is not in standard fetch types
-            agent,
         });
 
         const responseText = await response.text();
@@ -1505,15 +1548,13 @@ export async function allocateNumber(template: string): Promise<{ success?: bool
                     },
                 };
 
-                const numberResponse = await fetch(API_URL, {
+                const numberResponse = await fetchWithProxy(API_URL, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'Api-Key': apiKey,
                     },
                     body: JSON.stringify(numberListBody),
-                    // @ts-ignore
-                    agent,
                 });
 
                 const numberResponseText = await numberResponse.text();
@@ -1652,7 +1693,7 @@ export async function createPaymentRequest(data: {
         return { error: 'Amount must be greater than 0.' };
     }
 
-    const settings = await SettingDB.getAll();
+    const settings = await getCachedSettings();
     const minWithdrawal = settings.minimumWithdrawal ?? 10;
     if (data.amount < minWithdrawal) {
         return { error: `Minimum withdrawal amount is ${minWithdrawal}.` };
@@ -2025,7 +2066,7 @@ export async function createAgentWithdrawal(amount: number, walletAddress: strin
         if (amount <= 0) return { error: 'Amount must be greater than 0.' };
         if (amount > (agent.agentWalletBalance ?? 0)) return { error: 'Insufficient commission balance.' };
 
-        const settings = await SettingDB.getAll();
+        const settings = await getCachedSettings();
 
         // Atomic deduct first — fails if balance dropped below amount since validation
         const updated = await UserDB.deductBalance(agent.id, 'agentWalletBalance', amount);

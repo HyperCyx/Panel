@@ -12,8 +12,10 @@ export default async function SignupPage() {
         redirect('/dashboard');
     }
 
-    const { siteName, footerText } = await getPublicSettings();
-    const { signupEnabled } = await getSignupStatus();
+    const [{ siteName, footerText }, { signupEnabled }] = await Promise.all([
+        getPublicSettings(),
+        getSignupStatus(),
+    ]);
 
     if (!signupEnabled) {
         redirect('/login');

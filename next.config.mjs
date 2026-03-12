@@ -28,6 +28,10 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
+  // Reduce JS bundle sent to client
+  compiler: {
+    removeConsole: process.env.NODE_ENV === 'production' ? { exclude: ['error', 'warn'] } : false,
+  },
   images: {
     remotePatterns: [
       {
@@ -38,6 +42,7 @@ const nextConfig = {
       },
     ],
   },
+  // Optimize server external packages for faster cold starts on Vercel
   experimental: {
     serverActions: {
       allowedOrigins: [
@@ -51,6 +56,8 @@ const nextConfig = {
         ...codespacesHosts,
       ],
     },
+    // Enable optimized package imports to reduce bundle size
+    optimizePackageImports: ['lucide-react', 'date-fns', 'recharts'],
   },
 
 };

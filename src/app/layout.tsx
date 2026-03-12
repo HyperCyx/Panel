@@ -2,7 +2,7 @@ import type {Metadata} from 'next';
 import { Toaster } from "@/components/ui/toaster"
 import { AuthProvider } from '@/contexts/auth-context';
 import './globals.css';
-import { getPublicSettings } from './actions';
+import { getPublicSettings, getCurrentUser } from './actions';
 import { SettingsProvider } from '@/contexts/settings-provider';
 import { allColorKeys } from '@/lib/types';
 
@@ -19,7 +19,10 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const settings = await getPublicSettings();
+  const [settings, user] = await Promise.all([
+    getPublicSettings(),
+    getCurrentUser(),
+  ]);
   
   const generateThemeStyles = () => {
     let styles = ':root {';
@@ -40,7 +43,7 @@ export default async function RootLayout({
       </head>
       <body className="antialiased">
         <SettingsProvider value={{ siteName: settings.siteName, siteVersion: settings.siteVersion || '3.0.1', footerText: settings.footerText || '', currency: settings.currency || '৳' }}>
-            <AuthProvider>
+            <AuthProvider initialUser={user}>
             {children}
             </AuthProvider>
         </SettingsProvider>

@@ -14,11 +14,12 @@ export const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 interface AuthProviderProps {
     children: ReactNode;
+    initialUser?: UserProfile | null;
 }
 
-export const AuthProvider = ({ children }: AuthProviderProps) => {
-    const [user, setUser] = useState<UserProfile | null>(null);
-    const [loading, setLoading] = useState(true);
+export const AuthProvider = ({ children, initialUser }: AuthProviderProps) => {
+    const [user, setUser] = useState<UserProfile | null>(initialUser ?? null);
+    const [loading, setLoading] = useState(initialUser === undefined);
 
     const fetchUser = useCallback(async () => {
         setLoading(true);
@@ -33,8 +34,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     }, []);
 
     useEffect(() => {
+        // Skip initial fetch if we already have the user from the server
+        if (initialUser !== undefined) return;
         fetchUser();
-    }, [fetchUser]);
+    }, [fetchUser, initialUser]);
 
     const value = { user, loading, refreshUser: fetchUser };
 
