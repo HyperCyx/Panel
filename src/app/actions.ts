@@ -654,7 +654,7 @@ export async function login(values: z.infer<typeof loginSchema>) {
       path: '/',
     });
 
-    return { success: true, isAgent: user.isAgent };
+    return { success: true, isAdmin: user.isAdmin, isAgent: user.isAgent };
   } catch (error) {
     console.error("Login error:", error);
     return { error: 'An unexpected error occurred.' };

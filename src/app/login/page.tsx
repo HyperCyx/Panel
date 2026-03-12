@@ -9,6 +9,9 @@ export default async function LoginPage() {
     // Check if user is already logged in
     const user = await getCurrentUser();
     if (user) {
+        if (user.isAdmin) {
+            redirect('/admin');
+        }
         redirect('/dashboard');
     }
 

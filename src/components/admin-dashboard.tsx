@@ -6,7 +6,7 @@ import {
   LogOut, LayoutDashboard, Globe, UserCheck, BarChart3, ShieldOff, Banknote, Bell,
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
-import { adminLogout } from '@/app/actions';
+import { logout } from '@/app/actions';
 import Link from 'next/link';
 
 const OverviewTab = dynamic(() => import('./admin/overview-tab').then(m => ({ default: m.OverviewTab })));
@@ -62,7 +62,7 @@ export function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <form ref={logoutFormRef} action={adminLogout} className="hidden" />
+      <form ref={logoutFormRef} action={logout} className="hidden" />
 
       {/* Sidebar Backdrop */}
       {sidebarOpen && (
