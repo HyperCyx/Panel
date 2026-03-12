@@ -2,7 +2,7 @@ import { getCurrentUser, getPublicSettings } from '@/app/actions';
 import { PaymentPage } from '@/components/payment-page';
 import { CreditCard } from 'lucide-react';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export default async function PaymentPageRoute() {
   const [user, settings] = await Promise.all([

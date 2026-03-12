@@ -25,11 +25,14 @@ export default async function RootLayout({
   ]);
   
   const generateThemeStyles = () => {
+    // Strict HSL value pattern: "H S% L%" with optional alpha
+    const hslPattern = /^[\d.]+\s+[\d.]+%\s+[\d.]+%(?:\s*\/\s*[\d.]+%?)?$/;
     let styles = ':root {';
     for (const key of allColorKeys) {
         const cssVarName = '--' + key.slice(5).replace(/([A-Z])/g, '-$1').slice(1).toLowerCase();
-        if (settings[key]) {
-            styles += `${cssVarName}: ${settings[key]};`;
+        const value = settings[key];
+        if (value && typeof value === 'string' && hslPattern.test(value.trim())) {
+            styles += `${cssVarName}: ${value.trim()};`;
         }
     }
     styles += '}';

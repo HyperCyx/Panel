@@ -14,7 +14,7 @@ import type { FilterFormValues, SmsRecord, UserProfile, ProxySettings, Extracted
 import { allColorKeys } from '@/lib/types';
 import { redirect } from 'next/navigation';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-default-secret-key-change-this';
+const JWT_SECRET = process.env.JWT_SECRET || (process.env.NODE_ENV === 'production' ? (() => { throw new Error('JWT_SECRET environment variable must be set in production'); })() : 'dev-only-secret-key-not-for-production');
 
 // --- In-memory cache for settings (avoids MongoDB round-trip on every request) ---
 let _settingsCache: { data: Record<string, any>; ts: number } | null = null;
@@ -35,8 +35,8 @@ export async function invalidateSettingsCache() {
 }
 
 const filterSchema = z.object({
-  startDate: z.date({ required_error: 'Start date is required' }),
-  endDate: z.date({ required_error: 'End date is required' }),
+  startDate: z.date({ error: 'Start date is required' }),
+  endDate: z.date({ error: 'End date is required' }),
   senderId: z.string().optional(),
   phone: z.string().optional(),
 }).superRefine(({ startDate, endDate }, ctx) => {
@@ -97,16 +97,26 @@ async function getProxyDispatcher(): Promise<ProxyAgent | undefined> {
 
 /** Fetch wrapper that correctly uses proxy via undici dispatcher */
 async function fetchWithProxy(url: string, options: RequestInit): Promise<Response> {
-    const dispatcher = await getProxyDispatcher();
-    if (dispatcher) {
-        // Use undici's fetch with the proxy dispatcher
-        const { fetch: undiciFetch } = await import('undici');
-        return undiciFetch(url, {
-            ...options as any,
-            dispatcher,
-        }) as unknown as Response;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 25_000); // 25s timeout (under Vercel's 30s limit)
+    const signal = options.signal
+        ? AbortSignal.any([options.signal, controller.signal])
+        : controller.signal;
+
+    try {
+        const dispatcher = await getProxyDispatcher();
+        if (dispatcher) {
+            const { fetch: undiciFetch } = await import('undici');
+            return await undiciFetch(url, {
+                ...options as any,
+                signal: signal as any,
+                dispatcher,
+            }) as unknown as Response;
+        }
+        return await fetch(url, { ...options, signal });
+    } finally {
+        clearTimeout(timeoutId);
     }
-    return fetch(url, options);
 }
 
 async function getErrorMappings(): Promise<Record<string, string>> {
@@ -137,7 +147,7 @@ export async function fetchSmsData(
   
   const validation = filterSchema.safeParse(filter);
   if (!validation.success) {
-    return { error: validation.error.errors.map((e) => e.message).join(', ') };
+    return { error: validation.error.issues.map((e: { message: string }) => e.message).join(', ') };
   }
   
   const API_URL = 'https://api.iprn-elite.com/v1.0/csv';
@@ -630,7 +640,7 @@ export async function login(values: z.infer<typeof loginSchema>) {
       { expiresIn: '1d' }
     );
     
-    cookies().set('token', token, {
+    (await cookies()).set('token', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production' && process.env.FORCE_HTTP !== 'true',
       sameSite: 'strict',
@@ -646,13 +656,13 @@ export async function login(values: z.infer<typeof loginSchema>) {
 }
 
 export async function logout() {
-    cookies().delete('token');
-    cookies().delete('admin_session');
+    (await cookies()).delete('token');
+    (await cookies()).delete('admin_session');
     redirect('/');
 }
 
 export const getCurrentUser = cache(async (): Promise<UserProfile | null> => {
-    const token = cookies().get('token')?.value;
+    const token = (await cookies()).get('token')?.value;
     if (!token) return null;
 
     try {
@@ -722,12 +732,12 @@ export async function updateUserProfile(userId: string, values: z.infer<typeof u
 
         // Re-issue a new token with updated information
         const token = jwt.sign(
-          { userId: updatedUser.id.toString(), isAdmin: updatedUser.isAdmin, status: updatedUser.status },
+          { userId: updatedUser.id.toString(), isAdmin: updatedUser.isAdmin, isAgent: updatedUser.isAgent, status: updatedUser.status },
           JWT_SECRET,
           { expiresIn: '1d' }
         );
 
-        cookies().set('token', token, {
+        (await cookies()).set('token', token, {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production' && process.env.FORCE_HTTP !== 'true',
             sameSite: 'strict',
@@ -1402,40 +1412,48 @@ const adminLoginSchema = z.object({
 });
 
 export async function adminLogin(values: z.infer<typeof adminLoginSchema>) {
-  if (values.username === 'admin' && values.password === 'admin') {
-    cookies().set('admin_session', 'true', {
+  try {
+    const adminUser = await UserDB.findByEmail(values.username);
+    if (!adminUser || !adminUser.isAdmin || !adminUser.password) {
+      return { error: 'Invalid admin credentials.' };
+    }
+
+    const isPasswordValid = await UserDB.comparePassword(adminUser, values.password);
+    if (!isPasswordValid) {
+      return { error: 'Invalid admin credentials.' };
+    }
+
+    (await cookies()).set('admin_session', 'true', {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production' && process.env.FORCE_HTTP !== 'true',
       sameSite: 'strict',
-      maxAge: 60 * 60 * 24, // 24 hours (matches JWT token expiry)
+      maxAge: 60 * 60 * 24,
       path: '/',
     });
 
-    // Also issue a JWT token so the admin page can verify isAdmin via getCurrentUser
-        const adminUser = await UserDB.findByEmail('admin@example.com');
-    if (adminUser) {
-      const token = jwt.sign(
-                { userId: adminUser.id.toString(), isAdmin: adminUser.isAdmin, status: adminUser.status },
-        JWT_SECRET,
-        { expiresIn: '1d' }
-      );
-      cookies().set('token', token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production' && process.env.FORCE_HTTP !== 'true',
-        sameSite: 'strict',
-        maxAge: 60 * 60 * 24, // 1 day
-        path: '/',
-      });
-    }
+    const token = jwt.sign(
+      { userId: adminUser.id.toString(), isAdmin: adminUser.isAdmin, isAgent: adminUser.isAgent, status: adminUser.status },
+      JWT_SECRET,
+      { expiresIn: '1d' }
+    );
+    (await cookies()).set('token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production' && process.env.FORCE_HTTP !== 'true',
+      sameSite: 'strict',
+      maxAge: 60 * 60 * 24,
+      path: '/',
+    });
 
     return { success: true };
+  } catch (error) {
+    console.error('Admin login error:', error);
+    return { error: 'An unexpected error occurred.' };
   }
-  return { error: 'Invalid admin credentials.' };
 }
 
 export async function adminLogout() {
-  cookies().delete('admin_session');
-  cookies().delete('token');
+  (await cookies()).delete('admin_session');
+  (await cookies()).delete('token');
   redirect('/');
 }
 

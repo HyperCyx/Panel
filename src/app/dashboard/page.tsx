@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import type { DashboardStats } from '@/lib/types';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
 

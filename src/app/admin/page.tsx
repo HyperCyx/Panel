@@ -3,10 +3,10 @@ import { redirect } from 'next/navigation';
 import { AdminDashboard } from '@/components/admin-dashboard';
 import { getCurrentUser } from '@/app/actions';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export default async function AdminPage() {
-    const hasAdminSession = cookies().has('admin_session');
+    const hasAdminSession = (await cookies()).has('admin_session');
     
     if (!hasAdminSession) {
         redirect('/admin/login');

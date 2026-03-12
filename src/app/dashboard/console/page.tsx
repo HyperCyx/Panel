@@ -3,7 +3,7 @@ import { SmsInspector } from '@/components/sms-inspector';
 import { subHours } from 'date-fns';
 import { Code } from 'lucide-react';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export default async function ConsolePage() {
   const [smsResult, settings] = await Promise.all([

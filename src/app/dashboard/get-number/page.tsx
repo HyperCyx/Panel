@@ -2,7 +2,7 @@ import { getCurrentUser, getPublicSettings } from '@/app/actions';
 import { GetNumber } from '@/components/get-number';
 import { Smartphone } from 'lucide-react';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export default async function GetNumberPage() {
   const [user, settings] = await Promise.all([

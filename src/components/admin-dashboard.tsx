@@ -5,18 +5,20 @@ import {
   Menu, X, Users, Palette, AlertTriangle, Settings, CreditCard,
   LogOut, LayoutDashboard, Globe, UserCheck, BarChart3, ShieldOff, Banknote, Bell,
 } from 'lucide-react';
+import dynamic from 'next/dynamic';
 import { adminLogout } from '@/app/actions';
-import { OverviewTab } from './admin/overview-tab';
-import { UserManagementTab } from './admin/user-management-tab';
-import { ErrorManagementTab } from './admin/error-management-tab';
-import { SettingsTab } from './admin/settings-tab';
-import { AppearanceTab } from './admin/appearance-tab';
-import { PaymentManagementTab } from './admin/payment-management-tab';
-import { AgentManagementTab } from './admin/agent-management-tab';
-import { BlockedAppsTab } from './admin/blocked-apps-tab';
-import { PaymentMethodsTab } from './admin/payment-methods-tab';
-import { NotificationsTab } from './admin/notifications-tab';
 import Link from 'next/link';
+
+const OverviewTab = dynamic(() => import('./admin/overview-tab').then(m => ({ default: m.OverviewTab })));
+const UserManagementTab = dynamic(() => import('./admin/user-management-tab').then(m => ({ default: m.UserManagementTab })));
+const ErrorManagementTab = dynamic(() => import('./admin/error-management-tab').then(m => ({ default: m.ErrorManagementTab })));
+const SettingsTab = dynamic(() => import('./admin/settings-tab').then(m => ({ default: m.SettingsTab })));
+const AppearanceTab = dynamic(() => import('./admin/appearance-tab').then(m => ({ default: m.AppearanceTab })));
+const PaymentManagementTab = dynamic(() => import('./admin/payment-management-tab').then(m => ({ default: m.PaymentManagementTab })));
+const AgentManagementTab = dynamic(() => import('./admin/agent-management-tab').then(m => ({ default: m.AgentManagementTab })));
+const BlockedAppsTab = dynamic(() => import('./admin/blocked-apps-tab').then(m => ({ default: m.BlockedAppsTab })));
+const PaymentMethodsTab = dynamic(() => import('./admin/payment-methods-tab').then(m => ({ default: m.PaymentMethodsTab })));
+const NotificationsTab = dynamic(() => import('./admin/notifications-tab').then(m => ({ default: m.NotificationsTab })));
 import { useSettings } from '@/contexts/settings-provider';
 
 const ADMIN_NAV = [

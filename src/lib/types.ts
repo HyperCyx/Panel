@@ -19,8 +19,8 @@ export interface SmsRecord {
 }
 
 export const filterFormSchema = z.object({
-  startDate: z.date({ required_error: 'Start date is required' }),
-  endDate: z.date({ required_error: 'End date is required' }),
+  startDate: z.date({ error: 'Start date is required' }),
+  endDate: z.date({ error: 'End date is required' }),
   senderId: z.string().optional(),
   phone: z.string().optional(),
 });

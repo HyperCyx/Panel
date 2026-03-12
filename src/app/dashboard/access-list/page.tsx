@@ -2,7 +2,7 @@ import { getCurrentUser, getPublicSettings } from '@/app/actions';
 import { AccessList } from '@/components/access-list';
 import { Wifi } from 'lucide-react';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export default async function AccessListPage() {
   const [user, settings] = await Promise.all([
