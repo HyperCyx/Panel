@@ -195,9 +195,10 @@ export function PaymentManagementTab() {
                           )}
                         </TableCell>
                         <TableCell className="hidden lg:table-cell text-xs text-muted-foreground">
-                          {new Date(payment.createdAt).toLocaleString(undefined, {
+                          {new Date(payment.createdAt).toLocaleString('en-US', {
                             month: 'short', day: 'numeric', year: 'numeric',
                             hour: '2-digit', minute: '2-digit',
+                            timeZone: 'UTC',
                           })}
                         </TableCell>
                         <TableCell className="text-right">
@@ -259,9 +260,10 @@ export function PaymentManagementTab() {
                     <div className="flex items-center justify-between text-xs border-t pt-2">
                       <span className="font-bold text-sm text-foreground">{payment.currency} {payment.amount.toFixed(2)}</span>
                       <span className="text-muted-foreground">
-                        {new Date(payment.createdAt).toLocaleString(undefined, {
+                        {new Date(payment.createdAt).toLocaleString('en-US', {
                           month: 'short', day: 'numeric',
                           hour: '2-digit', minute: '2-digit',
+                          timeZone: 'UTC',
                         })}
                       </span>
                     </div>

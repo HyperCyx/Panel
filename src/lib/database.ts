@@ -90,8 +90,18 @@ export const UserDB = {
     return result.length > 0 ? result[0].total : 0;
   },
 
+  // Update OTP rate for ALL non-admin users at once
+  async updateAllOtpRate(rate: number): Promise<number> {
+    await connectDB();
+    const result = await UserModel.updateMany(
+      { isAdmin: { $ne: true } },
+      { $set: { otpRate: rate } }
+    );
+    return result.modifiedCount;
+  },
+
   // Create new user
-  async create(userData: { email: string; password?: string; name: string; phone?: string; isAdmin?: boolean; isAgent?: boolean; agentEmail?: string; approvalStatus?: string; status?: string }): Promise<User> {
+  async create(userData: { email: string; password?: string; name: string; phone?: string; isAdmin?: boolean; isAgent?: boolean; agentEmail?: string; approvalStatus?: string; status?: string; otpRate?: number }): Promise<User> {
     await connectDB();
     
     let hashedPassword = userData.password;
@@ -110,6 +120,7 @@ export const UserDB = {
       approvalStatus: userData.approvalStatus || 'approved',
       status: userData.status || 'active',
       provider: 'credentials',
+      ...(userData.otpRate !== undefined && { otpRate: userData.otpRate }),
     });
 
     return this.parseUser(user);
@@ -319,7 +330,7 @@ export const AllocatedNumberDB = {
   async countByUserIdToday(userId: string): Promise<number> {
     await connectDB();
     const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
+    startOfDay.setUTCHours(0, 0, 0, 0);
     return AllocatedNumberModel.countDocuments({ userId, allocatedAt: { $gte: startOfDay } });
   },
 

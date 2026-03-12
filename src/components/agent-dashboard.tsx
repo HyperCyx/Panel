@@ -690,7 +690,7 @@ export function AgentDashboard({ user }: { user: UserProfile }) {
                         <p className={`text-sm mt-1 whitespace-pre-wrap ${n.isRead ? 'text-muted-foreground/70' : 'text-muted-foreground'}`}>{n.message}</p>
                         <div className="flex items-center gap-1 mt-2 text-[11px] text-muted-foreground">
                           <Clock className="h-3 w-3" />
-                          {new Date(n.createdAt).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                          {new Date(n.createdAt).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })}
                         </div>
                       </div>
                     </div>

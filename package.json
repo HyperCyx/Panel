@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@date-fns/utc": "^2.1.1",
     "@hookform/resolvers": "^5.2.2",
     "@radix-ui/react-alert-dialog": "^1.0.5",
     "@radix-ui/react-avatar": "^1.0.4",

@@ -157,5 +157,6 @@ const NotificationSchema: Schema = new Schema({
 }, { timestamps: true });
 
 NotificationSchema.index({ createdAt: -1 });
+NotificationSchema.index({ readBy: 1 });  // speeds up unread count queries
 
 export const Notification: Model<INotification> = models.Notification || mongoose.model<INotification>('Notification', NotificationSchema);

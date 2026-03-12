@@ -83,6 +83,7 @@ export interface AdminSettings extends ColorSettings {
   paymentWalletAddress: string;
   paymentNetwork: string;
   minimumWithdrawal: number;
+  defaultOtpRate: number;
   defaultOrigins: string[];
   blockedApps: string[];
   paymentMethods: PaymentMethod[];

@@ -155,7 +155,7 @@ export function NotificationsTab() {
                                         <div className="flex items-center gap-3 mt-2 text-[11px] text-muted-foreground">
                                             <span className="flex items-center gap-1">
                                                 <Clock className="h-3 w-3" />
-                                                {new Date(n.createdAt).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                                {new Date(n.createdAt).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })}
                                             </span>
                                             <span className="flex items-center gap-1">
                                                 <Users className="h-3 w-3" />

@@ -2,6 +2,7 @@
 
 import { z } from 'zod';
 import { format, differenceInDays, startOfDay, endOfDay, subDays, subHours } from 'date-fns';
+import { UTCDate } from '@date-fns/utc';
 import { cookies } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import { cache } from 'react';
@@ -589,6 +590,10 @@ export async function signup(values: z.infer<typeof signupSchema>) {
             return { error: 'Invalid agent email. Please provide a valid agent email ID.' };
         }
         
+        // Use global default OTP rate from admin settings for new users
+        const settings = await getCachedSettings();
+        const defaultRate = settings.defaultOtpRate ?? 0.50;
+
         await UserDB.create({
             name: values.name,
             phone: values.phone,
@@ -598,6 +603,7 @@ export async function signup(values: z.infer<typeof signupSchema>) {
             approvalStatus: 'pending',
             status: 'active',
             isAdmin: false,
+            otpRate: defaultRate,
         });
 
         return { success: true };
@@ -910,6 +916,7 @@ export async function getAdminSettings(): Promise<Partial<AdminSettings> & { err
             defaultOrigins: settings.defaultOrigins ?? ['Telegram', 'WhatsApp', 'Bitget', 'Binance', 'Google'],
             blockedApps: settings.blockedApps ?? [],
             paymentMethods: settings.paymentMethods ?? [],
+            defaultOtpRate: settings.defaultOtpRate ?? 0.50,
             
             // Color settings with defaults
             colorPrimary: settings.colorPrimary ?? '217.2 91.2% 59.8%',
@@ -965,6 +972,12 @@ export async function updateAdminSettings(settings: Partial<AdminSettings>) {
         }
 
             await SettingDB.setMany(settingsToSave);
+
+        // If defaultOtpRate changed, apply it to ALL existing users
+        if (settings.defaultOtpRate !== undefined && settings.defaultOtpRate > 0) {
+            await UserDB.updateAllOtpRate(settings.defaultOtpRate);
+        }
+
         // Invalidate caches so new settings take effect immediately
         invalidateSettingsCache();
         _proxyDispatcherCache = null;
@@ -1240,16 +1253,17 @@ export async function checkNumberOtp(numberId: string): Promise<{ otp?: string; 
         }
 
         if (record.status === 'pending') {
-            // First OTP — transition pending→success and charge
+            // First OTP — transition pending→success and credit earnings
             const updated = await AllocatedNumberDB.updateOtp(numberId, user.id, otp, smsMessage);
             if (updated) {
                 await creditAllocationEarnings(user.id);
                 return { status: 'success', otp, sms: smsMessage, otpList: updated.otpList };
             }
         } else if (record.status === 'success') {
-            // Subsequent OTP — append without charging
+            // Subsequent OTP — append and also credit earnings
             const updated = await AllocatedNumberDB.appendOtp(numberId, user.id, otp, smsMessage);
             if (updated) {
+                await creditAllocationEarnings(user.id);
                 return { status: 'success', otp, sms: smsMessage, otpList: updated.otpList };
             }
         }
@@ -1269,7 +1283,8 @@ export async function getDashboardStats(): Promise<{ data?: DashboardStats; erro
     const user = await getCurrentUser();
     if (!user) return { error: 'Not authenticated' };
     try {
-        const now = new Date();
+        // Use UTCDate so "today" boundaries always match the API's GMT+0 timezone
+        const now = new UTCDate();
         const todayStart = startOfDay(now);
         const todayEnd = endOfDay(now);
         const yesterdayStart = startOfDay(subDays(now, 1));
@@ -1331,7 +1346,8 @@ export async function getAdminDashboardStats(): Promise<{ data?: AdminDashboardS
     const user = await getCurrentUser();
     if (!user?.isAdmin) return { error: 'Not authorized' };
     try {
-        const now = new Date();
+        // Use UTCDate so "today" boundaries always match the API's GMT+0 timezone
+        const now = new UTCDate();
         const todayStart = startOfDay(now);
         const todayEnd = endOfDay(now);
         const yesterdayStart = startOfDay(subDays(now, 1));
@@ -1463,7 +1479,10 @@ async function creditAllocationEarnings(userId: string) {
         const fullUser = await UserDB.findById(userId);
         if (!fullUser) return;
 
-        const otpRate = fullUser.otpRate ?? 0;
+        // Use user's rate, falling back to the global default from admin settings
+        const settings = await getCachedSettings();
+        const globalRate = settings.defaultOtpRate ?? 0.50;
+        const otpRate = fullUser.otpRate ?? globalRate;
         if (otpRate <= 0) return;
 
         // Atomic increment — safe under concurrent access

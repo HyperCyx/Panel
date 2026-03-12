@@ -35,6 +35,7 @@ const defaultSettings: { [key: string]: any } = {
     signupEnabled: true,
     footerText: '© {YEAR} {SITENAME}. All rights reserved.',
     errorMappings: [],
+    defaultOtpRate: 0.50,
     // Theme Colors
     colorPrimary: '217.2 91.2% 59.8%',
     colorPrimaryForeground: '210 20% 98%',

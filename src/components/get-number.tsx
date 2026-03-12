@@ -433,7 +433,7 @@ export function GetNumber({ userId, currency = '৳', otpRate = 0.50, otpCheckIn
                                 </span>
                               </button>
                               <span className="text-[10px] text-muted-foreground whitespace-nowrap">
-                                {new Date(item.receivedAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                                {new Date(item.receivedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'UTC' })}
                               </span>
                             </div>
                             {item.sms && (
@@ -479,9 +479,10 @@ export function GetNumber({ userId, currency = '৳', otpRate = 0.50, otpCheckIn
                         <p className="text-[10px] text-muted-foreground truncate">{rec.operator || '—'}</p>
                       </div>
                       <p className="text-[10px] text-muted-foreground whitespace-nowrap flex-shrink-0">
-                        {new Date(rec.allocatedAt).toLocaleString(undefined, {
+                        {new Date(rec.allocatedAt).toLocaleString('en-US', {
                           month: 'short', day: 'numeric',
                           hour: '2-digit', minute: '2-digit',
+                          timeZone: 'UTC',
                         })}
                       </p>
                     </div>

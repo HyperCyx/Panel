@@ -21,8 +21,8 @@ export function SettingsTab() {
     const [otpCheckInterval, setOtpCheckInterval] = useState(5);
     const [consoleRefreshInterval, setConsoleRefreshInterval] = useState(60);
     const [currency, setCurrency] = useState('৳');
-    const [paymentNetwork, setPaymentNetwork] = useState('TRC20');
     const [minimumWithdrawal, setMinimumWithdrawal] = useState(10);
+    const [defaultOtpRate, setDefaultOtpRate] = useState(0.50);
     const [defaultOrigins, setDefaultOrigins] = useState<string[]>([]);
     const [newOrigin, setNewOrigin] = useState('');
     const [isLoading, setIsLoading] = useState(true);
@@ -42,8 +42,8 @@ export function SettingsTab() {
                     setOtpCheckInterval(result.otpCheckInterval ?? 5);
                     setConsoleRefreshInterval(result.consoleRefreshInterval ?? 60);
                     setCurrency(result.currency ?? '৳');
-                    setPaymentNetwork(result.paymentNetwork ?? 'TRC20');
                     setMinimumWithdrawal(result.minimumWithdrawal ?? 10);
+                    setDefaultOtpRate(result.defaultOtpRate ?? 0.50);
                     setDefaultOrigins(result.defaultOrigins ?? []);
                 }
             } catch (error) {
@@ -66,8 +66,8 @@ export function SettingsTab() {
                 otpCheckInterval,
                 consoleRefreshInterval,
                 currency,
-                paymentNetwork,
                 minimumWithdrawal,
+                defaultOtpRate,
                 defaultOrigins,
             } as Partial<AdminSettings>);
             if (result.error) {
@@ -199,21 +199,6 @@ export function SettingsTab() {
                     </div>
                     <div className="flex flex-row items-center justify-between rounded-lg border p-4">
                         <div className="space-y-0.5">
-                            <Label htmlFor="payment-network" className="cursor-pointer">Payment Network</Label>
-                            <p className="text-sm text-muted-foreground">
-                                The crypto network for withdrawals (e.g., TRC20, ERC20, BEP20).
-                            </p>
-                        </div>
-                        <Input
-                            id="payment-network"
-                            className="w-28 text-center"
-                            value={paymentNetwork}
-                            onChange={(e) => setPaymentNetwork(e.target.value)}
-                            disabled={isLoading}
-                        />
-                    </div>
-                    <div className="flex flex-row items-center justify-between rounded-lg border p-4">
-                        <div className="space-y-0.5">
                             <Label htmlFor="min-withdrawal" className="cursor-pointer">Minimum Withdrawal Amount</Label>
                             <p className="text-sm text-muted-foreground">
                                 The minimum amount a user must request for a withdrawal.
@@ -226,6 +211,24 @@ export function SettingsTab() {
                             className="w-24 text-center"
                             value={minimumWithdrawal}
                             onChange={(e) => setMinimumWithdrawal(Math.max(1, parseInt(e.target.value) || 10))}
+                            disabled={isLoading}
+                        />
+                    </div>
+                    <div className="flex flex-row items-center justify-between rounded-lg border p-4">
+                        <div className="space-y-0.5">
+                            <Label htmlFor="default-otp-rate" className="cursor-pointer">Default OTP Rate</Label>
+                            <p className="text-sm text-muted-foreground">
+                                The amount credited to a user's wallet for each OTP received. Applied to new users and as fallback.
+                            </p>
+                        </div>
+                        <Input
+                            id="default-otp-rate"
+                            type="number"
+                            min={0}
+                            step={0.01}
+                            className="w-24 text-center"
+                            value={defaultOtpRate}
+                            onChange={(e) => setDefaultOtpRate(Math.max(0, parseFloat(e.target.value) || 0))}
                             disabled={isLoading}
                         />
                     </div>

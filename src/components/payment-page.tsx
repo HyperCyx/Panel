@@ -331,7 +331,7 @@ export function PaymentPage({ userId, walletBalance, currency, paymentNetwork, m
                     </td>
                     <td className="py-3">
                       <p className="text-[10px] text-muted-foreground">
-                        {new Date(rec.createdAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                        {new Date(rec.createdAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })}
                       </p>
                     </td>
                   </tr>
@@ -362,7 +362,7 @@ export function PaymentPage({ userId, walletBalance, currency, paymentNetwork, m
                 </div>
                 <div className="flex items-center justify-between text-[10px] text-muted-foreground">
                   <span>{rec.network}</span>
-                  <span>{new Date(rec.createdAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                  <span>{new Date(rec.createdAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })}</span>
                 </div>
                 {rec.adminNote && <p className="text-[10px] text-muted-foreground italic border-t border-border/30 pt-1">Note: {rec.adminNote}</p>}
               </div>
