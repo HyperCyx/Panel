@@ -20,6 +20,7 @@ export function SettingsTab() {
     const [numberExpiryMinutes, setNumberExpiryMinutes] = useState(5);
     const [otpCheckInterval, setOtpCheckInterval] = useState(5);
     const [consoleRefreshInterval, setConsoleRefreshInterval] = useState(60);
+    const [getNumberCooldown, setGetNumberCooldown] = useState(5);
     const [currency, setCurrency] = useState('৳');
     const [minimumWithdrawal, setMinimumWithdrawal] = useState(10);
     const [defaultOtpRate, setDefaultOtpRate] = useState(0.50);
@@ -41,6 +42,7 @@ export function SettingsTab() {
                     setNumberExpiryMinutes(result.numberExpiryMinutes ?? 5);
                     setOtpCheckInterval(result.otpCheckInterval ?? 5);
                     setConsoleRefreshInterval(result.consoleRefreshInterval ?? 60);
+                    setGetNumberCooldown(result.getNumberCooldown ?? 5);
                     setCurrency(result.currency ?? '৳');
                     setMinimumWithdrawal(result.minimumWithdrawal ?? 10);
                     setDefaultOtpRate(result.defaultOtpRate ?? 0.50);
@@ -65,6 +67,7 @@ export function SettingsTab() {
                 numberExpiryMinutes,
                 otpCheckInterval,
                 consoleRefreshInterval,
+                getNumberCooldown,
                 currency,
                 minimumWithdrawal,
                 defaultOtpRate,
@@ -170,6 +173,24 @@ export function SettingsTab() {
                             className="w-20 text-center"
                             value={consoleRefreshInterval}
                             onChange={(e) => setConsoleRefreshInterval(Math.max(0, Math.min(600, parseInt(e.target.value) || 60)))}
+                            disabled={isLoading}
+                        />
+                    </div>
+                    <div className="flex flex-row items-center justify-between rounded-lg border p-4">
+                        <div className="space-y-0.5">
+                            <Label htmlFor="get-number-cooldown" className="cursor-pointer">Get Number Cooldown (seconds)</Label>
+                            <p className="text-sm text-muted-foreground">
+                                Mandatory wait time after a user successfully gets a number before they can click again.
+                            </p>
+                        </div>
+                        <Input
+                            id="get-number-cooldown"
+                            type="number"
+                            min={0}
+                            max={60}
+                            className="w-20 text-center"
+                            value={getNumberCooldown}
+                            onChange={(e) => setGetNumberCooldown(Math.max(0, Math.min(60, parseInt(e.target.value) || 0)))}
                             disabled={isLoading}
                         />
                     </div>

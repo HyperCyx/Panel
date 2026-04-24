@@ -52,10 +52,11 @@ export function ProfileView({ user, walletBalance, otpRate }: ProfileViewProps) 
         <User className="h-4 w-4" />
         My Profile
       </h2>
-      <div className="bg-card border border-border rounded-2xl p-6 shadow-sm">
+      <div className="glass-panel rounded-3xl p-6 sm:p-8 relative overflow-hidden group">
+        <div className="absolute -top-32 -right-32 w-64 h-64 bg-primary/10 rounded-full blur-3xl pointer-events-none group-hover:bg-primary/20 transition-colors duration-700" />
         {/* Avatar */}
-        <div className="flex flex-col items-center gap-3 mb-6">
-          <div className="w-20 h-20 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-bold text-3xl select-none">
+        <div className="flex flex-col items-center gap-4 mb-8 relative z-10">
+          <div className="w-24 h-24 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-primary-foreground font-extrabold text-4xl select-none shadow-[0_0_20px_-5px_hsl(var(--primary)/0.5)] ring-4 ring-background/50">
             {initials}
           </div>
           <div className="text-center">
@@ -70,22 +71,22 @@ export function ProfileView({ user, walletBalance, otpRate }: ProfileViewProps) 
         </div>
 
         {/* Details */}
-        <div className="space-y-0 border-t border-border/50 pt-5">
+        <div className="space-y-1 border-t border-border/30 pt-6 relative z-10">
           {[
             { icon: <User className="h-3.5 w-3.5" />, label: 'Name',    value: user.name || '—' },
             { icon: <Mail className="h-3.5 w-3.5" />, label: 'Email',   value: user.email },
             { icon: <Wallet className="h-3.5 w-3.5" />, label: 'Balance', value: <span className="font-bold text-emerald-600">{currency} {walletBalance.toFixed(2)}</span> },
             { icon: <Zap className="h-3.5 w-3.5" />,  label: 'OTP Rate', value: <span className="font-bold text-amber-600">{currency} {otpRate.toFixed(2)}</span> },
           ].map(({ icon, label, value }) => (
-            <div key={label} className="flex items-center justify-between py-3 border-b border-border/30 last:border-0">
-              <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+            <div key={label} className="flex items-center justify-between py-3.5 px-4 rounded-xl hover:bg-muted/50 transition-colors">
+              <span className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-2.5">
                 {icon} {label}
               </span>
-              <span className="text-sm text-foreground">{value}</span>
+              <span className="text-sm font-semibold text-foreground">{value}</span>
             </div>
           ))}
-          <div className="flex items-center justify-between py-3">
-            <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+          <div className="flex items-center justify-between py-3.5 px-4 rounded-xl hover:bg-muted/50 transition-colors">
+            <span className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-2.5">
               <BadgeCheck className="h-3.5 w-3.5" /> Status
             </span>
             <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
@@ -99,7 +100,7 @@ export function ProfileView({ user, walletBalance, otpRate }: ProfileViewProps) 
         {/* Edit button */}
         <button
           onClick={() => { setEditName(user.name ?? ''); setEditEmail(user.email ?? ''); setEditOpen(true); }}
-          className="mt-6 w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-semibold transition-colors"
+          className="mt-8 w-full flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-bold transition-all shadow-[0_0_15px_-3px_hsl(var(--primary)/0.4)] relative z-10"
         >
           <Pencil className="h-4 w-4" />
           Edit Details

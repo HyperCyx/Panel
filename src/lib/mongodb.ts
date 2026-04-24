@@ -27,6 +27,15 @@ mongoose.connection.on('disconnected', () => {
     cached.promise = null;
 });
 
+// Start background cron sync only once
+if (!cached.syncStarted) {
+    cached.syncStarted = true;
+    // We import dynamically to avoid polluting the global connection script initially
+    import('./sync').then(({ startBackgroundSync }) => {
+        startBackgroundSync();
+    }).catch(console.error);
+}
+
 const defaultSettings: { [key: string]: any } = {
     apiKey: '',
     proxySettings: { ip: '', port: '', username: '', password: '' },
@@ -36,6 +45,7 @@ const defaultSettings: { [key: string]: any } = {
     footerText: '© {YEAR} {SITENAME}. All rights reserved.',
     errorMappings: [],
     defaultOtpRate: 0.50,
+    getNumberCooldown: 5,
     // Theme Colors
     colorPrimary: '217.2 91.2% 59.8%',
     colorPrimaryForeground: '210 20% 98%',

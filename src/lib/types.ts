@@ -85,7 +85,10 @@ export interface AdminSettings extends ColorSettings {
   minimumWithdrawal: number;
   defaultOtpRate: number;
   defaultOrigins: string[];
-  blockedApps: string[];
+  blockedApps?: string[];
+  customErrors?: Record<string, string>;
+  accessListSyncInterval?: number;
+  getNumberCooldown?: number;
   paymentMethods: PaymentMethod[];
 }
 
@@ -101,6 +104,7 @@ export interface PublicSettings extends ColorSettings {
     minimumWithdrawal: number;
     otpCheckInterval: number;
     consoleRefreshInterval: number;
+    getNumberCooldown?: number;
     defaultOrigins: string[];
     blockedApps: string[];
     paymentMethods: PaymentMethod[];
@@ -169,6 +173,7 @@ export const accessListFilterFormSchema = z.object({
   origin: z.string().optional(),
   destination: z.string().optional(),
   message: z.string().optional(),
+  per_page: z.number().optional(),
 });
 
 export type AccessListFilterFormValues = z.infer<typeof accessListFilterFormSchema>;

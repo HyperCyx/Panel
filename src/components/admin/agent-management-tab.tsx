@@ -33,7 +33,7 @@ export function AgentManagementTab() {
   const [editRate, setEditRate] = useState('');
 
   const form = useForm<AgentFormValues>({
-    resolver: zodResolver(agentFormSchema),
+    resolver: zodResolver(agentFormSchema) as any,
     defaultValues: { name: '', email: '', password: '', commissionRate: 10 },
   });
 

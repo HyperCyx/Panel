@@ -10,6 +10,7 @@ import { usePathname } from 'next/navigation';
 import { logout, updateUserProfile, getUnreadNotificationCount } from '@/app/actions';
 import type { UserProfile } from '@/lib/types';
 import Link from 'next/link';
+import { ThemeToggle } from '@/components/theme-toggle';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -116,8 +117,8 @@ export function DashboardShell({ user, siteName, children }: DashboardShellProps
 
       {/* ── Sidebar ── */}
       <aside
-        className={`fixed top-0 left-0 h-full w-72 z-50 bg-card border-r border-border shadow-lg flex flex-col transition-transform duration-300 ease-in-out lg:translate-x-0 ${
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        className={`fixed top-4 bottom-4 left-4 h-[calc(100vh-2rem)] w-64 z-50 rounded-[2rem] glass-panel flex flex-col transition-transform duration-300 ease-in-out lg:translate-x-0 ${
+          sidebarOpen ? 'translate-x-0' : '-translate-x-[120%]'
         }`}
       >
         {/* Brand */}
@@ -125,7 +126,7 @@ export function DashboardShell({ user, siteName, children }: DashboardShellProps
           <div className="flex items-center gap-2.5">
             <Globe className="h-7 w-7 text-primary" />
             <div>
-              <span className="text-xl font-extrabold text-primary tracking-wide">{siteName}</span>
+              <span className="text-xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-primary to-secondary tracking-wide">{siteName}</span>
             </div>
           </div>
           <button
@@ -149,10 +150,10 @@ export function DashboardShell({ user, siteName, children }: DashboardShellProps
                 key={item.id}
                 href={item.path}
                 onClick={() => setSidebarOpen(false)}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium transition-all duration-300 ${
                   isActive
-                    ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20'
-                    : 'text-muted-foreground hover:bg-primary/10 hover:text-primary'
+                    ? 'bg-primary/20 text-primary border border-primary/30 neon-glow backdrop-blur-md'
+                    : 'text-muted-foreground hover:bg-white/5 hover:text-foreground'
                 }`}
               >
                 <NavIcon name={item.icon} active={isActive} />
@@ -187,8 +188,8 @@ export function DashboardShell({ user, siteName, children }: DashboardShellProps
       </aside>
 
       {/* ── Header ── */}
-      <header className="sticky top-0 z-30 bg-background/95 backdrop-blur-md border-b border-border lg:pl-72">
-        <div className="flex items-center justify-between px-4 py-3 max-w-5xl mx-auto w-full">
+      <header className="sticky top-4 z-30 glass-panel rounded-full mx-4 lg:ml-72 lg:mr-8 mb-8 border border-white/10 shadow-lg">
+        <div className="flex items-center justify-between px-6 py-3 w-full">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setSidebarOpen(true)}
@@ -197,7 +198,7 @@ export function DashboardShell({ user, siteName, children }: DashboardShellProps
             >
               <Menu className="h-5 w-5" />
             </button>
-            <span className="text-lg font-extrabold text-primary tracking-wide">{siteName}</span>
+            <span className="text-lg font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-primary to-secondary tracking-wide">{siteName}</span>
           </div>
           <div className="flex items-center gap-2">
             <Link
@@ -212,6 +213,7 @@ export function DashboardShell({ user, siteName, children }: DashboardShellProps
                 </span>
               )}
             </Link>
+            <ThemeToggle />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
@@ -259,14 +261,14 @@ export function DashboardShell({ user, siteName, children }: DashboardShellProps
       </header>
 
       {/* ── Page Content ── */}
-      <main className="px-4 py-6 max-w-5xl mx-auto lg:pl-72 overflow-x-hidden">
+      <main className="px-4 py-2 max-w-6xl mx-auto lg:ml-72">
         {children}
       </main>
 
       {/* ── Footer ── */}
       {processedFooterText && (
-        <footer className="border-t border-border bg-background/80 lg:pl-72">
-          <div className="px-4 py-4 max-w-5xl mx-auto text-center text-xs text-muted-foreground">
+        <footer className="relative mt-12 mb-4 mx-4 lg:ml-72 lg:mr-8 glass-panel rounded-2xl">
+          <div className="px-4 py-4 text-center text-xs text-muted-foreground">
             {processedFooterText}
             {siteVersion && (
               <span className="ml-2 text-[10px] font-semibold bg-primary/10 text-primary px-2 py-0.5 rounded-md">

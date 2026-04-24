@@ -4,11 +4,11 @@ import { z } from 'zod';
 import { format, differenceInDays, startOfDay, endOfDay, subDays, subHours } from 'date-fns';
 import { UTCDate } from '@date-fns/utc';
 import { cookies } from 'next/headers';
-import { revalidatePath } from 'next/cache';
+import { revalidatePath, unstable_cache } from 'next/cache';
 import { cache } from 'react';
 import jwt from 'jsonwebtoken';
 import { ProxyAgent } from 'undici';
-import { UserDB, SettingDB, AllocatedNumberDB, PaymentRequestDB, UserWalletDB, NotificationDB } from '@/lib/database';
+import { UserDB, SettingDB, AllocatedNumberDB, PaymentRequestDB, UserWalletDB, NotificationDB, AccessListDB } from '@/lib/database';
 import { User as UserModel } from '@/lib/models';
 import connectDB from '@/lib/mongodb';
 import type { FilterFormValues, SmsRecord, UserProfile, ProxySettings, ExtractedInfo, AdminSettings, PublicSettings, AccessListFilterFormValues, AccessListRecord, DashboardStats, AdminDashboardStats, AllocatedNumberInfo, PaymentRequestInfo, UserWalletInfo } from '@/lib/types';
@@ -364,180 +364,27 @@ function extractInfoWithoutAI(message: string): ExtractedInfo {
     return { confirmationCode, link };
 }
 
+import { syncAccessListFromApi } from '@/lib/sync';
+
+export async function forceSyncAccessList(): Promise<{ success?: boolean; error?: string }> {
+  try {
+    const user = await getCurrentUser();
+    if (!user || !user.isAdmin) {
+      return { error: 'Unauthorized. Only admins can force a sync.' };
+    }
+    
+    await syncAccessListFromApi();
+    return { success: true };
+  } catch (error) {
+    return { error: 'Failed to manually sync access list.' };
+  }
+}
+
 export async function fetchAccessListData(
   formValues: AccessListFilterFormValues
 ): Promise<{ data?: AccessListRecord[]; error?: string }> {
-  const apiKey = await getApiKey();
-
-  if (!apiKey) {
-    return { error: 'API key is not configured. Please set it in the admin panel.' };
-  }
-
-  const API_URL = 'https://api.iprn-elite.com/v1.0/csv';
-  const body = {
-    id: null,
-    jsonrpc: '2.0',
-    method: 'sms.access_list__get_list:account_price',
-    params: {
-      filter: {
-        cur_key: 1,
-        destination: formValues.destination,
-        message: formValues.message,
-        origin: formValues.origin,
-        sp_key_list: null
-      },
-      page: 1,
-      per_page: 100,
-    },
-  };
-
   try {
-    const response = await fetchWithProxy(API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Api-Key': apiKey,
-      },
-      body: JSON.stringify(body),
-      cache: 'no-store',
-    });
-
-    if (!response.ok) {
-       const errorText = await response.text();
-        try {
-            const jsonError = JSON.parse(errorText);
-            if (jsonError.error) {
-                const reasonCode = jsonError.error.reason_code;
-                if (reasonCode) {
-                    const errorMap = await getErrorMappings();
-                    const customMessage = errorMap[reasonCode];
-                    if (customMessage) {
-                        return { error: customMessage };
-                    }
-                }
-                return { error: `API Error: ${jsonError.error.message}` };
-            }
-        } catch (e) {
-            // Not JSON error
-        }
-      return { error: `API Error: ${response.status} ${response.statusText}. ${errorText}` };
-    }
-
-    const csvText = await response.text();
-    if (!csvText || csvText.trim() === '') {
-        return { data: [] };
-    }
-    
-    if (csvText.trim().startsWith('{')) {
-        try {
-            const jsonError = JSON.parse(csvText);
-            if (jsonError.error) {
-                const reasonCode = jsonError.error.reason_code;
-                 if (reasonCode) {
-                    const errorMap = await getErrorMappings();
-                    const customMessage = errorMap[reasonCode];
-                    if (customMessage) {
-                        return { error: customMessage };
-                    }
-                }
-                return { error: `API returned an error: ${jsonError.error.message}` };
-            }
-        } catch (e) {
-            // Not JSON error
-        }
-    }
-
-    const parseCsvWithQuotes = (input: string): string[][] => {
-        const rows: string[][] = [];
-        let inQuotes = false;
-        let row: string[] = [];
-        let field = '';
-        const text = input.trim();
-
-        for (let i = 0; i < text.length; i++) {
-            const char = text[i];
-            if (inQuotes) {
-                if (char === '"') {
-                    if (i + 1 < text.length && text[i + 1] === '"') {
-                        field += '"';
-                        i++; 
-                    } else {
-                        inQuotes = false;
-                    }
-                } else {
-                    field += char;
-                }
-            } else {
-                if (char === '"') {
-                    inQuotes = true;
-                } else if (char === ';') {
-                    row.push(field);
-                    field = '';
-                } else if (char === '\n' || char === '\r') {
-                    row.push(field);
-                    rows.push(row);
-                    row = [];
-                    field = '';
-                    if (char === '\r' && i + 1 < text.length && text[i + 1] === '\n') {
-                        i++;
-                    }
-                } else {
-                    field += char;
-                }
-            }
-        }
-
-        if (field || row.length > 0) {
-            row.push(field);
-            rows.push(row);
-        }
-
-        return rows.filter(r => r.length > 1 || (r.length === 1 && r[0]));
-    };
-    
-    const allRows = parseCsvWithQuotes(csvText);
-
-    if (allRows.length < 2) {
-      return { data: [] };
-    }
-
-    const headers = allRows[0].map(h => h.trim().toLowerCase());
-    const dataRows = allRows.slice(1);
-    const records: AccessListRecord[] = [];
-
-    const columnMap = {
-        price: headers.indexOf('price'),
-        accessOrigin: headers.indexOf('access origin'),
-        accessDestination: headers.indexOf('access destination'),
-        testNumber: headers.indexOf('test number'),
-        rate: headers.indexOf('rate'),
-        currency: headers.indexOf('currency'),
-        comment: headers.indexOf('comment'),
-        message: headers.indexOf('message'),
-        limitHour: headers.indexOf('limit hour'),
-        limitDay: headers.indexOf('limit day'),
-        datetime: headers.indexOf('datetime'),
-    };
-    
-    if (columnMap.accessOrigin === -1) {
-        return { error: "CSV response is missing required column ('access origin')." };
-    }
-    
-    for (const parts of dataRows) {
-        records.push({
-            price: parts[columnMap.price] || '',
-            accessOrigin: parts[columnMap.accessOrigin] || '',
-            accessDestination: parts[columnMap.accessDestination] || '',
-            testNumber: parts[columnMap.testNumber] || '',
-            rate: parts[columnMap.rate] || '',
-            currency: parts[columnMap.currency] || '',
-            comment: parts[columnMap.comment] || '',
-            message: parts[columnMap.message] || '',
-            limitHour: parts[columnMap.limitHour] || '',
-            limitDay: parts[columnMap.limitDay] || '',
-            datetime: parts[columnMap.datetime] || '',
-        });
-    }
+    const records = await AccessListDB.search(formValues);
     
     // Filter out records from blocked apps
     const publicSettings = await getPublicSettings();
@@ -552,8 +399,8 @@ export async function fetchAccessListData(
     return { data: filteredRecords };
   } catch (err) {
     const error = err as Error;
-    console.error('Failed to fetch access list data:', error);
-    return { error: error.message || 'An unknown error occurred.' };
+    console.error('Failed to fetch access list from local DB:', error);
+    return { error: 'Failed to load access list data. Please try again later.' };
   }
 }
 
@@ -663,7 +510,6 @@ export async function login(values: z.infer<typeof loginSchema>) {
 
 export async function logout() {
     (await cookies()).delete('token');
-    (await cookies()).delete('admin_session');
     redirect('/');
 }
 
@@ -675,6 +521,10 @@ export const getCurrentUser = cache(async (): Promise<UserProfile | null> => {
     const decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
         const user = await UserDB.findById(String(decoded.userId));
         if (!user) return null;
+
+        // Block access for users who are blocked or not approved
+        if (user.status === 'blocked') return null;
+        if (user.approvalStatus !== 'approved') return null;
 
         return {
             id: user.id,
@@ -707,6 +557,11 @@ const userProfileSchema = z.object({
 
 export async function updateUserProfile(userId: string, values: z.infer<typeof userProfileSchema>) {
     try {
+        // Verify the caller owns this profile (prevents IDOR)
+        const currentUser = await getCurrentUser();
+        if (!currentUser) return { error: 'Not authenticated.' };
+        if (currentUser.id !== userId) return { error: 'Unauthorized.' };
+
         const validation = userProfileSchema.safeParse(values);
         if (!validation.success) {
             return { error: 'Invalid data provided.' };
@@ -1152,8 +1007,18 @@ export async function getUserAllocatedNumbers(): Promise<{ data?: AllocatedNumbe
         // Expire old numbers first
         await AllocatedNumberDB.expireOldNumbers();
         const records = await AllocatedNumberDB.findByUserId(user.id);
+        
+        const now = new UTCDate();
+        const weekStart = startOfDay(subDays(now, 6)).getTime();
+        const todayEnd = endOfDay(now).getTime();
+        
+        const recentRecords = records.filter(r => {
+            const time = new Date(r.allocatedAt).getTime();
+            return time >= weekStart && time <= todayEnd;
+        });
+
         return {
-            data: records.map(r => ({
+            data: recentRecords.map(r => ({
                 id: r.id,
                 number: r.number,
                 country: r.country,
@@ -1260,10 +1125,9 @@ export async function checkNumberOtp(numberId: string): Promise<{ otp?: string; 
                 return { status: 'success', otp, sms: smsMessage, otpList: updated.otpList };
             }
         } else if (record.status === 'success') {
-            // Subsequent OTP — append and also credit earnings
+            // Subsequent OTP — append only, do NOT credit earnings again
             const updated = await AllocatedNumberDB.appendOtp(numberId, user.id, otp, smsMessage);
             if (updated) {
-                await creditAllocationEarnings(user.id);
                 return { status: 'success', otp, sms: smsMessage, otpList: updated.otpList };
             }
         }
@@ -1439,13 +1303,7 @@ export async function adminLogin(values: z.infer<typeof adminLoginSchema>) {
       return { error: 'Invalid admin credentials.' };
     }
 
-    (await cookies()).set('admin_session', 'true', {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production' && process.env.FORCE_HTTP !== 'true',
-      sameSite: 'strict',
-      maxAge: 60 * 60 * 24,
-      path: '/',
-    });
+    // admin_session cookie removed — admin auth uses JWT isAdmin flag only
 
     const token = jwt.sign(
       { userId: adminUser.id.toString(), isAdmin: adminUser.isAdmin, isAgent: adminUser.isAgent, status: adminUser.status },
@@ -1468,7 +1326,6 @@ export async function adminLogin(values: z.infer<typeof adminLoginSchema>) {
 }
 
 export async function adminLogout() {
-  (await cookies()).delete('admin_session');
   (await cookies()).delete('token');
   redirect('/');
 }
@@ -1969,7 +1826,7 @@ export async function getAgentAllUsers(): Promise<{ users?: UserProfile[]; error
         await connectDB();
 
         if (currentUser.isAdmin) {
-            const users = await UserModel.find({ approvalStatus: { $ne: undefined } }).select('-password');
+            const users = await UserModel.find({ approvalStatus: { $exists: true } }).select('-password');
             return { users: users.map((u: any) => UserDB.parseUserProfile(u)) };
         } else {
             // Agent sees only their referred users

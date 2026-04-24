@@ -5,6 +5,7 @@ import './globals.css';
 import { getPublicSettings, getCurrentUser } from './actions';
 import { SettingsProvider } from '@/contexts/settings-provider';
 import { allColorKeys } from '@/lib/types';
+import { ThemeProvider } from '@/components/theme-provider';
 
 export async function generateMetadata(): Promise<Metadata> {
   const settings = await getPublicSettings();
@@ -27,7 +28,7 @@ export default async function RootLayout({
   const generateThemeStyles = () => {
     // Strict HSL value pattern: "H S% L%" with optional alpha
     const hslPattern = /^[\d.]+\s+[\d.]+%\s+[\d.]+%(?:\s*\/\s*[\d.]+%?)?$/;
-    let styles = ':root {';
+    let styles = ':root:not(.dark) {';
     for (const key of allColorKeys) {
         const cssVarName = '--' + key.slice(5).replace(/([A-Z])/g, '-$1').slice(1).toLowerCase();
         const value = settings[key];
@@ -44,13 +45,15 @@ export default async function RootLayout({
        <head>
           <style dangerouslySetInnerHTML={{ __html: generateThemeStyles() }} />
       </head>
-      <body className="antialiased">
-        <SettingsProvider value={{ siteName: settings.siteName, siteVersion: settings.siteVersion || '3.0.1', footerText: settings.footerText || '', currency: settings.currency || '৳' }}>
-            <AuthProvider initialUser={user}>
-            {children}
-            </AuthProvider>
-        </SettingsProvider>
-        <Toaster />
+      <body className="antialiased transition-colors duration-500">
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+          <SettingsProvider value={{ siteName: settings.siteName, siteVersion: settings.siteVersion || '3.0.1', footerText: settings.footerText || '', currency: settings.currency || '৳' }}>
+              <AuthProvider initialUser={user}>
+              {children}
+              </AuthProvider>
+          </SettingsProvider>
+          <Toaster />
+        </ThemeProvider>
       </body>
     </html>
   );

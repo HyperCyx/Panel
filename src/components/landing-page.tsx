@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Globe, BarChart, ShieldCheck, ArrowRight, Code, MessageSquare, DollarSign } from 'lucide-react';
+import { ThemeToggle } from '@/components/theme-toggle';
 
 interface LandingPageProps {
   siteName: string;
@@ -18,12 +19,13 @@ export function LandingPage({ siteName, signupEnabled, footerText, siteVersion }
 
   return (
     <div className="flex flex-col min-h-dvh bg-background text-foreground">
-      <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur-sm">
-        <div className="container mx-auto flex h-16 items-center justify-between px-4 md:px-6">
+      <header className="fixed top-4 left-4 right-4 z-50 glass-panel rounded-full max-w-7xl mx-auto shadow-lg border border-border/50 dark:border-white/10">
+        <div className="flex h-16 items-center justify-between px-6 md:px-8">
           <Link href="/" className="flex items-center gap-2">
-            <span className="text-xl font-semibold text-foreground">{siteName}</span>
+            <span className="text-xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-primary to-secondary tracking-wide">{siteName}</span>
           </Link>
           <nav className="hidden items-center gap-4 text-sm font-medium md:flex">
+             <ThemeToggle />
              <Link href="/login">
                 <Button variant="ghost">Login</Button>
             </Link>
@@ -33,7 +35,8 @@ export function LandingPage({ siteName, signupEnabled, footerText, siteVersion }
                 </Link>
             )}
           </nav>
-          <div className="flex items-center gap-2 md:hidden">
+          <div className="flex items-center gap-3 md:hidden">
+             <ThemeToggle />
              <Link href="/login">
                 <Button variant="outline" size="sm">Login</Button>
             </Link>
@@ -46,14 +49,15 @@ export function LandingPage({ siteName, signupEnabled, footerText, siteVersion }
         </div>
       </header>
 
-      <main className="flex-1">
+      <main className="flex-1 pt-24">
         {/* Hero Section */}
-        <section className="container mx-auto px-4 md:px-6 py-20 md:py-32 text-center">
-          <div className="max-w-4xl mx-auto">
-            <h1 className="text-4xl md:text-6xl font-extrabold tracking-tighter mb-6 bg-clip-text text-transparent bg-gradient-to-r from-primary to-primary/60">
-              Monetize Your OTP Traffic with Global IPRN
+        <section className="container mx-auto px-4 md:px-6 py-20 md:py-32 text-center relative">
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-primary/20 rounded-full blur-[100px] pointer-events-none" />
+          <div className="max-w-4xl mx-auto relative z-10">
+            <h1 className="text-5xl md:text-7xl font-extrabold tracking-tighter mb-6 text-transparent bg-clip-text bg-gradient-to-br from-foreground to-foreground/60 neon-text-glow leading-tight">
+              Monetize Your OTP Traffic with <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-secondary">Global IPRN</span>
             </h1>
-            <p className="text-lg md:text-xl text-muted-foreground mb-10 max-w-2xl mx-auto">
+            <p className="text-lg md:text-xl text-muted-foreground/80 mb-10 max-w-2xl mx-auto">
               Leverage our robust network of International Premium Rate Numbers to deliver OTPs and generate revenue from every message you send.
             </p>
             <div className="flex flex-col sm:flex-row justify-center items-center gap-4">
@@ -72,16 +76,16 @@ export function LandingPage({ siteName, signupEnabled, footerText, siteVersion }
         </section>
 
         {/* Features Section */}
-        <section id="features" className="bg-muted/50 py-16 md:py-24">
-          <div className="container mx-auto px-4 md:px-6">
-            <div className="text-center mb-12">
-              <h2 className="text-3xl font-bold tracking-tight">Your Partner in SMS Monetization</h2>
-              <p className="text-muted-foreground mt-2 max-w-2xl mx-auto">
+        <section id="features" className="py-16 md:py-24 relative">
+          <div className="container mx-auto px-4 md:px-6 relative z-10">
+            <div className="text-center mb-16">
+              <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-foreground to-muted-foreground">Your Partner in SMS Monetization</h2>
+              <p className="text-muted-foreground mt-4 max-w-2xl mx-auto text-lg">
                 We provide the platform and network you need to succeed.
               </p>
             </div>
             <div className="grid md:grid-cols-3 gap-8">
-              <Card className="transform hover:-translate-y-2 transition-transform duration-300">
+              <Card className="futuristic-card rounded-3xl transform hover:-translate-y-2">
                 <CardHeader className="items-center">
                   <div className="p-3 rounded-full bg-primary/10 text-primary mb-4">
                     <Globe className="h-8 w-8" />
@@ -92,7 +96,7 @@ export function LandingPage({ siteName, signupEnabled, footerText, siteVersion }
                   Access a vast inventory of IPRNs across numerous countries and mobile operators for maximum reach and revenue potential.
                 </CardContent>
               </Card>
-              <Card className="transform hover:-translate-y-2 transition-transform duration-300">
+              <Card className="futuristic-card rounded-3xl transform hover:-translate-y-2">
                 <CardHeader className="items-center">
                     <div className="p-3 rounded-full bg-primary/10 text-primary mb-4">
                         <BarChart className="h-8 w-8" />
@@ -103,7 +107,7 @@ export function LandingPage({ siteName, signupEnabled, footerText, siteVersion }
                   Monitor your traffic, track delivery rates, and view your earnings with our powerful and intuitive dashboard.
                 </CardContent>
               </Card>
-              <Card className="transform hover:-translate-y-2 transition-transform duration-300">
+              <Card className="futuristic-card rounded-3xl transform hover:-translate-y-2">
                 <CardHeader className="items-center">
                     <div className="p-3 rounded-full bg-primary/10 text-primary mb-4">
                         <ShieldCheck className="h-8 w-8" />
@@ -119,36 +123,37 @@ export function LandingPage({ siteName, signupEnabled, footerText, siteVersion }
         </section>
         
         {/* How It Works Section */}
-        <section id="how-it-works" className="py-16 md:py-24">
-            <div className="container mx-auto px-4 md:px-6">
-                <div className="text-center mb-12">
-                    <h2 className="text-3xl font-bold tracking-tight">Start Earning in 3 Simple Steps</h2>
-                    <p className="text-muted-foreground mt-2 max-w-2xl mx-auto">
+        <section id="how-it-works" className="py-16 md:py-24 relative">
+            <div className="absolute right-0 top-1/2 w-96 h-96 bg-secondary/10 rounded-full blur-[100px] pointer-events-none" />
+            <div className="container mx-auto px-4 md:px-6 relative z-10">
+                <div className="text-center mb-16">
+                    <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-foreground to-muted-foreground">Start Earning in 3 Simple Steps</h2>
+                    <p className="text-muted-foreground mt-4 max-w-2xl mx-auto text-lg">
                         Our straightforward process gets you up and running in no time.
                     </p>
                 </div>
                 <div className="max-w-4xl mx-auto grid md:grid-cols-3 gap-8 text-center">
-                    <div className="flex flex-col items-center">
-                        <div className="p-4 rounded-full bg-primary/10 text-primary mb-4">
-                            <Code className="h-10 w-10" />
+                    <div className="flex flex-col items-center futuristic-card rounded-3xl p-8">
+                        <div className="p-5 rounded-2xl bg-primary/20 text-primary mb-6 neon-glow border border-primary/30">
+                            <Code className="h-8 w-8" />
                         </div>
                         <h3 className="text-xl font-semibold mb-2">1. Integrate</h3>
                         <p className="text-muted-foreground">
                             Easily integrate with your existing systems using our simple and well-documented API.
                         </p>
                     </div>
-                    <div className="flex flex-col items-center">
-                        <div className="p-4 rounded-full bg-primary/10 text-primary mb-4">
-                            <MessageSquare className="h-10 w-10" />
+                    <div className="flex flex-col items-center futuristic-card rounded-3xl p-8">
+                        <div className="p-5 rounded-2xl bg-primary/20 text-primary mb-6 neon-glow border border-primary/30">
+                            <MessageSquare className="h-8 w-8" />
                         </div>
                         <h3 className="text-xl font-semibold mb-2">2. Send Traffic</h3>
                         <p className="text-muted-foreground">
                             Route your A2P and P2P OTP SMS traffic through our secure global IPRN network.
                         </p>
                     </div>
-                    <div className="flex flex-col items-center">
-                        <div className="p-4 rounded-full bg-primary/10 text-primary mb-4">
-                            <DollarSign className="h-10 w-10" />
+                    <div className="flex flex-col items-center futuristic-card rounded-3xl p-8">
+                        <div className="p-5 rounded-2xl bg-primary/20 text-primary mb-6 neon-glow border border-primary/30">
+                            <DollarSign className="h-8 w-8" />
                         </div>
                         <h3 className="text-xl font-semibold mb-2">3. Earn Revenue</h3>
                         <p className="text-muted-foreground">
@@ -161,7 +166,7 @@ export function LandingPage({ siteName, signupEnabled, footerText, siteVersion }
 
       </main>
 
-      <footer className="border-t bg-muted/50">
+      <footer className="relative mt-12 mb-4 mx-4 glass-panel rounded-2xl max-w-7xl lg:mx-auto">
         <div className="container mx-auto px-4 md:px-6 py-6 text-center text-muted-foreground text-sm">
           {processedFooterText}
           {siteVersion && (

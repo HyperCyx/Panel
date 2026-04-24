@@ -17,7 +17,13 @@ export default async function GetNumberPage() {
         <Smartphone className="h-4 w-4" />
         Get Number
       </h2>
-      <GetNumber userId={user.id} currency={settings.currency || '৳'} otpRate={user.otpRate ?? 0.50} otpCheckInterval={settings.otpCheckInterval ?? 5} />
+      <GetNumber 
+        userId={user.id} 
+        currency={settings.currency || '৳'} 
+        otpRate={user.otpRate ?? 0.50} 
+        otpCheckInterval={settings.otpCheckInterval ?? 5} 
+        cooldown={settings.getNumberCooldown ?? 5}
+      />
     </div>
   );
 }

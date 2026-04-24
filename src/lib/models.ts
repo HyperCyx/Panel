@@ -160,3 +160,38 @@ NotificationSchema.index({ createdAt: -1 });
 NotificationSchema.index({ readBy: 1 });  // speeds up unread count queries
 
 export const Notification: Model<INotification> = models.Notification || mongoose.model<INotification>('Notification', NotificationSchema);
+
+// AccessListRecord Interface and Schema
+export interface IAccessListRecord extends Document {
+  price: string;
+  accessOrigin: string;
+  accessDestination: string;
+  testNumber: string;
+  rate: string;
+  currency: string;
+  comment: string;
+  message: string;
+  limitHour: string;
+  limitDay: string;
+  datetime: string;
+}
+
+const AccessListRecordSchema: Schema = new Schema({
+  price: { type: String, default: '' },
+  accessOrigin: { type: String, default: '' },
+  accessDestination: { type: String, default: '' },
+  testNumber: { type: String, default: '' },
+  rate: { type: String, default: '' },
+  currency: { type: String, default: '' },
+  comment: { type: String, default: '' },
+  message: { type: String, default: '' },
+  limitHour: { type: String, default: '' },
+  limitDay: { type: String, default: '' },
+  datetime: { type: String, default: '' },
+}, { timestamps: true });
+
+// Compound indexes for searching
+AccessListRecordSchema.index({ accessOrigin: 1 });
+AccessListRecordSchema.index({ datetime: -1 });
+
+export const AccessListRecordModel: Model<IAccessListRecord> = models.AccessListRecord || mongoose.model<IAccessListRecord>('AccessListRecord', AccessListRecordSchema);

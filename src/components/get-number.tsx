@@ -13,6 +13,7 @@ interface GetNumberProps {
   currency?: string;
   otpRate?: number;
   otpCheckInterval?: number;
+  cooldown?: number;
 }
 
 type RecordFilter = 'all' | 'success' | 'pending' | 'expired';
@@ -72,9 +73,10 @@ function CountdownTimer({ expiresAt, status }: { expiresAt: string; status: stri
   );
 }
 
-export function GetNumber({ userId, currency = '৳', otpRate = 0.50, otpCheckInterval = 5 }: GetNumberProps) {
+export function GetNumber({ userId, currency = '৳', otpRate = 0.50, otpCheckInterval = 5, cooldown = 5 }: GetNumberProps) {
   const [rangeInput, setRangeInput] = useState('');
   const [gettingNumber, setGettingNumber] = useState(false);
+  const [cooldownRemaining, setCooldownRemaining] = useState(0);
   const [copied, setCopied] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -82,8 +84,11 @@ export function GetNumber({ userId, currency = '৳', otpRate = 0.50, otpCheckIn
   const [records, setRecords] = useState<AllocatedNumberInfo[]>([]);
   const [loadingRecords, setLoadingRecords] = useState(false);
   const [recordFilter, setRecordFilter] = useState<RecordFilter>('all');
+  const [dateFilter, setDateFilter] = useState<'today' | 'yesterday' | 'last7days'>('today');
   const [perPage, setPerPage] = useState(15);
+  const [currentPage, setCurrentPage] = useState(1);
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
+  const [showDateDropdown, setShowDateDropdown] = useState(false);
   const [showPerPageDropdown, setShowPerPageDropdown] = useState(false);
 
   const fetchRecords = useCallback(async () => {
@@ -205,18 +210,30 @@ export function GetNumber({ userId, currency = '৳', otpRate = 0.50, otpCheckIn
     setGettingNumber(true);
     setError(null);
     try {
-      const result = await allocateNumber(rangeInput.trim());
+      const cleanRange = rangeInput.trim();
+      const result = await allocateNumber(cleanRange);
       if (result.error) {
         setError(result.error);
-        return;
-      }
-      if (result.success && result.number) {
-        // Auto-copy the generated number to clipboard
-        navigator.clipboard.writeText(result.number);
+      } else if (result.success && result.number) {
+        setRecordFilter('all');
+        if (cooldown > 0) {
+          setCooldownRemaining(cooldown);
+          const interval = setInterval(() => {
+            setCooldownRemaining((prev) => {
+              if (prev <= 1) {
+                clearInterval(interval);
+                return 0;
+              }
+              return prev - 1;
+            });
+          }, 1000);
+        }
+        try { navigator.clipboard.writeText(result.number); } catch {}
         setCopied(result.number);
         setTimeout(() => setCopied(null), 2000);
-        // Refresh records to show the new number
         await fetchRecords();
+      } else {
+        setError('Failed to get a number. Please try again.');
       }
     } catch {
       setError('An unexpected error occurred.');
@@ -226,7 +243,7 @@ export function GetNumber({ userId, currency = '৳', otpRate = 0.50, otpCheckIn
   };
 
   const handleCopy = (number: string) => {
-    navigator.clipboard.writeText(number);
+    try { navigator.clipboard.writeText(number); } catch {}
     setCopied(number);
     setTimeout(() => setCopied(null), 2000);
   };
@@ -240,11 +257,29 @@ export function GetNumber({ userId, currency = '৳', otpRate = 0.50, otpCheckIn
   };
 
   const filteredRecords = records.filter(r => {
-    if (recordFilter === 'all') return true;
-    return getEffectiveStatus(r) === recordFilter;
+    if (recordFilter !== 'all' && getEffectiveStatus(r) !== recordFilter) return false;
+    
+    const allocatedTime = new Date(r.allocatedAt).getTime();
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const yesterdayStart = todayStart - 86400000;
+    
+    if (dateFilter === 'today') {
+      if (allocatedTime < todayStart) return false;
+    } else if (dateFilter === 'yesterday') {
+      if (allocatedTime < yesterdayStart || allocatedTime >= todayStart) return false;
+    }
+    return true;
   });
 
-  const paginatedRecords = filteredRecords.slice(0, perPage);
+  const totalPages = Math.max(1, Math.ceil(filteredRecords.length / perPage));
+  const startIndex = (currentPage - 1) * perPage;
+  const paginatedRecords = filteredRecords.slice(startIndex, startIndex + perPage);
+
+  // Reset to page 1 if filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [recordFilter, dateFilter, perPage]);
 
   const filterLabel: Record<RecordFilter, string> = {
     all: 'All Records',
@@ -284,15 +319,21 @@ export function GetNumber({ userId, currency = '৳', otpRate = 0.50, otpCheckIn
         {/* Get Number Button */}
         <button
           onClick={handleGetNumber}
-          disabled={gettingNumber}
+          disabled={gettingNumber || cooldownRemaining > 0 || !rangeInput.trim()}
           className="w-full flex items-center justify-center gap-3 py-4 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-extrabold text-lg uppercase tracking-wider shadow-lg shadow-primary/25 transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
         >
           {gettingNumber ? (
             <Loader2 className="h-6 w-6 animate-spin" />
+          ) : cooldownRemaining > 0 ? (
+            <Clock className="h-6 w-6" />
           ) : (
             <Zap className="h-6 w-6" />
           )}
-          {gettingNumber ? 'Getting...' : 'GET NUMBER'}
+          {gettingNumber 
+            ? 'Getting...' 
+            : cooldownRemaining > 0 
+              ? `Wait ${cooldownRemaining}s` 
+              : 'GET NUMBER'}
         </button>
 
         {/* Cost Info */}
@@ -304,7 +345,7 @@ export function GetNumber({ userId, currency = '৳', otpRate = 0.50, otpCheckIn
       </div>
 
       {/* ── MY NUMBERS TABLE ── */}
-      <div className="bg-card border border-border rounded-2xl p-5 shadow-sm overflow-hidden">
+      <div className="bg-card border border-border rounded-2xl p-5 shadow-sm">
         <div className="flex items-center gap-2 mb-4">
           <Phone className="h-5 w-5 text-primary" />
           <h3 className="text-base font-bold text-primary">My Numbers</h3>
@@ -312,38 +353,66 @@ export function GetNumber({ userId, currency = '৳', otpRate = 0.50, otpCheckIn
         </div>
 
         {/* Controls Row */}
-        <div className="flex items-center gap-3 mb-4">
-          {/* Filter dropdown */}
-          <div className="relative flex-1">
-            <button
-              onClick={() => setShowFilterDropdown(!showFilterDropdown)}
-              className="w-full flex items-center justify-between px-4 py-2.5 rounded-lg border border-border bg-card text-sm font-medium text-foreground hover:border-primary/30 transition"
-            >
-              <span>{filterLabel[recordFilter]}</span>
-              <ChevronDown className="h-4 w-4 text-muted-foreground" />
-            </button>
-            {showFilterDropdown && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-lg z-20">
-                {(Object.keys(filterLabel) as RecordFilter[]).map((f, i, arr) => (
-                  <button
-                    key={f}
-                    onClick={() => { setRecordFilter(f); setShowFilterDropdown(false); }}
-                    className={`w-full text-left px-4 py-2.5 text-sm hover:bg-primary/10 transition ${
-                      recordFilter === f ? 'bg-primary/10 text-primary font-semibold' : 'text-foreground'
-                    } ${i === 0 ? 'rounded-t-lg' : ''} ${i === arr.length - 1 ? 'rounded-b-lg' : ''}`}
-                  >
-                    {filterLabel[f]}
-                  </button>
-                ))}
-              </div>
-            )}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-4">
+          <div className="flex items-center gap-3 flex-1">
+            {/* Filter dropdown */}
+            <div className="relative flex-1">
+              <button
+                onClick={() => setShowFilterDropdown(!showFilterDropdown)}
+                className="w-full flex items-center justify-between px-4 py-2.5 rounded-lg border border-border bg-card text-sm font-medium text-foreground hover:border-primary/30 transition"
+              >
+                <span>{filterLabel[recordFilter]}</span>
+                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              </button>
+              {showFilterDropdown && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-lg z-20">
+                  {(Object.keys(filterLabel) as RecordFilter[]).map((f, i, arr) => (
+                    <button
+                      key={f}
+                      onClick={() => { setRecordFilter(f); setShowFilterDropdown(false); }}
+                      className={`w-full text-left px-4 py-2.5 text-sm hover:bg-primary/10 transition ${
+                        recordFilter === f ? 'bg-primary/10 text-primary font-semibold' : 'text-foreground'
+                      } ${i === 0 ? 'rounded-t-lg' : ''} ${i === arr.length - 1 ? 'rounded-b-lg' : ''}`}
+                    >
+                      {filterLabel[f]}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Date dropdown */}
+            <div className="relative flex-1">
+              <button
+                onClick={() => setShowDateDropdown(!showDateDropdown)}
+                className="w-full flex items-center justify-between px-4 py-2.5 rounded-lg border border-border bg-card text-sm font-medium text-foreground hover:border-primary/30 transition"
+              >
+                <span>{dateFilter === 'today' ? 'Today' : dateFilter === 'yesterday' ? 'Yesterday' : 'Last 7 Days'}</span>
+                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              </button>
+              {showDateDropdown && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-lg z-20">
+                  {(['today', 'yesterday', 'last7days'] as const).map((f, i, arr) => (
+                    <button
+                      key={f}
+                      onClick={() => { setDateFilter(f); setShowDateDropdown(false); }}
+                      className={`w-full text-left px-4 py-2.5 text-sm hover:bg-primary/10 transition ${
+                        dateFilter === f ? 'bg-primary/10 text-primary font-semibold' : 'text-foreground'
+                      } ${i === 0 ? 'rounded-t-lg' : ''} ${i === arr.length - 1 ? 'rounded-b-lg' : ''}`}
+                    >
+                      {f === 'today' ? 'Today' : f === 'yesterday' ? 'Yesterday' : 'Last 7 Days'}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Refresh */}
           <button
             onClick={fetchRecords}
             disabled={loadingRecords}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-lg border border-primary text-primary text-sm font-semibold hover:bg-primary/10 transition disabled:opacity-50"
+            className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border border-primary text-primary text-sm font-semibold hover:bg-primary/10 transition disabled:opacity-50"
           >
             <RefreshCw className={`h-4 w-4 ${loadingRecords ? 'animate-spin' : ''}`} />
             Refresh
@@ -512,7 +581,7 @@ export function GetNumber({ userId, currency = '৳', otpRate = 0.50, otpCheckIn
         </div>
 
         {/* Footer Controls */}
-        <div className="flex items-center justify-center gap-4 mt-4 pt-4 border-t border-border">
+        <div className="flex items-center justify-between gap-4 mt-4 pt-4 border-t border-border">
           {/* Per page */}
           <div className="relative">
             <button
@@ -537,6 +606,27 @@ export function GetNumber({ userId, currency = '৳', otpRate = 0.50, otpCheckIn
                 ))}
               </div>
             )}
+          </div>
+
+          {/* Pagination */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="px-3 py-1.5 rounded-lg border border-border text-sm font-medium hover:bg-muted disabled:opacity-50 transition"
+            >
+              Prev
+            </button>
+            <span className="text-sm text-muted-foreground font-medium">
+              Page {currentPage} of {totalPages}
+            </span>
+            <button
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+              className="px-3 py-1.5 rounded-lg border border-border text-sm font-medium hover:bg-muted disabled:opacity-50 transition"
+            >
+              Next
+            </button>
           </div>
         </div>
       </div>

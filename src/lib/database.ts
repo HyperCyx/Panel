@@ -597,3 +597,83 @@ export const NotificationDB = {
     await NotificationModel.deleteOne({ _id: id });
   },
 };
+
+// AccessList Record Interface
+export interface AccessListRecordInfo {
+  price: string;
+  accessOrigin: string;
+  accessDestination: string;
+  testNumber: string;
+  rate: string;
+  currency: string;
+  comment: string;
+  message: string;
+  limitHour: string;
+  limitDay: string;
+  datetime: string;
+}
+
+export class AccessListDB {
+    static async bulkReplace(records: AccessListRecordInfo[]): Promise<void> {
+        const { getDb } = await import('./sqlite');
+        const db = getDb();
+        
+        const insert = db.prepare(`
+          INSERT INTO access_records (
+            price, accessOrigin, accessDestination, testNumber, rate, currency, comment, message, limitHour, limitDay, datetime
+          ) VALUES (
+            @price, @accessOrigin, @accessDestination, @testNumber, @rate, @currency, @comment, @message, @limitHour, @limitDay, @datetime
+          )
+        `);
+
+        const insertMany = db.transaction((recs: AccessListRecordInfo[]) => {
+          db.exec('DELETE FROM access_records'); // Wipe all existing
+          for (const rec of recs) {
+            insert.run(rec);
+          }
+        });
+
+        insertMany(records);
+    }
+    
+    static async search(filter: { origin?: string, destination?: string, message?: string, per_page?: number }): Promise<AccessListRecordInfo[]> {
+        const { getDb } = await import('./sqlite');
+        const db = getDb();
+
+        let sql = 'SELECT * FROM access_records WHERE 1=1';
+        const params: any = {};
+
+        if (filter.origin) {
+            sql += ' AND accessOrigin LIKE @origin';
+            params.origin = `%${filter.origin}%`;
+        }
+        if (filter.destination) {
+            sql += ' AND accessDestination LIKE @destination';
+            params.destination = `%${filter.destination}%`;
+        }
+        if (filter.message) {
+            sql += ' AND message LIKE @message';
+            params.message = `%${filter.message}%`;
+        }
+
+        sql += ' ORDER BY datetime DESC LIMIT @limit';
+        params.limit = filter.per_page && filter.per_page > 0 ? filter.per_page : 100;
+
+        const stmt = db.prepare(sql);
+        const docs = stmt.all(params) as any[];
+
+        return docs.map((d) => ({
+            price: d.price || '',
+            accessOrigin: d.accessOrigin || '',
+            accessDestination: d.accessDestination || '',
+            testNumber: d.testNumber || '',
+            rate: d.rate || '',
+            currency: d.currency || '',
+            comment: d.comment || '',
+            message: d.message || '',
+            limitHour: d.limitHour || '',
+            limitDay: d.limitDay || '',
+            datetime: d.datetime || '',
+        }));
+    }
+}

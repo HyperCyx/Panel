@@ -159,9 +159,11 @@ export function AccessList({ defaultOrigins }: AccessListProps) {
     setLoading(true);
     setError(null);
     try {
+      const perPagePerOrigin = defaultOrigins.length > 0 ? Math.max(10, Math.ceil(150 / defaultOrigins.length)) : 150;
+      
       const promises = defaultOrigins.length > 0
-        ? defaultOrigins.map((origin) => fetchAccessListData({ origin }))
-        : [fetchAccessListData({})];
+        ? defaultOrigins.map((origin) => fetchAccessListData({ origin, per_page: perPagePerOrigin }))
+        : [fetchAccessListData({ per_page: 150 })];
 
       const results = await Promise.all(promises);
 

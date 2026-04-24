@@ -19,14 +19,15 @@ function StatCard({
   subtitle?: string;
 }) {
   return (
-    <div className="bg-card border border-border rounded-2xl p-3 sm:p-4 flex items-center gap-2.5 sm:gap-3 hover:border-primary/30 hover:shadow-md transition-all overflow-hidden">
-      <div className={`w-9 h-9 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${iconBg}`}>
+    <div className="glass-panel border border-border/50 rounded-3xl p-4 sm:p-6 flex items-center gap-3 sm:gap-5 hover:border-primary/50 hover:shadow-[0_0_25px_-5px_hsl(var(--primary)/0.4)] transition-all duration-500 relative overflow-hidden group">
+      <div className="absolute -inset-4 bg-gradient-to-br from-primary/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none" />
+      <div className={`w-12 h-12 sm:w-16 sm:h-16 rounded-2xl flex items-center justify-center flex-shrink-0 ${iconBg} shadow-inner relative z-10 transition-transform duration-500 group-hover:scale-110 group-hover:rotate-3`}>
         {icon}
       </div>
-      <div className="min-w-0 flex-1">
-        <p className="text-[9px] sm:text-[11px] font-semibold uppercase tracking-wider sm:tracking-widest text-muted-foreground leading-tight">{label}</p>
-        <p className="text-base sm:text-2xl font-bold text-foreground mt-0.5 sm:mt-1 leading-none truncate">{value}</p>
-        {subtitle && <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 truncate">{subtitle}</p>}
+      <div className="min-w-0 flex-1 relative z-10">
+        <p className="text-[10px] sm:text-xs font-bold uppercase tracking-widest text-muted-foreground/80 leading-tight mb-1">{label}</p>
+        <p className="text-2xl sm:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-br from-foreground to-foreground/70 truncate tracking-tight">{value}</p>
+        {subtitle && <p className="text-[10px] sm:text-xs text-muted-foreground mt-1 truncate font-medium">{subtitle}</p>}
       </div>
     </div>
   );
@@ -219,18 +220,21 @@ export function OverviewTab() {
 
       {/* Weekly Trend */}
       <section>
-        <div className="bg-card border border-border rounded-2xl p-5 shadow-sm">
-          <SectionHeader icon={<Activity className="h-4 w-4" />} title="Number Allocations (Last 7 Days)" />
+        <div className="glass-panel border border-border/50 rounded-3xl p-6 md:p-8 shadow-sm relative overflow-hidden group hover:border-primary/30 transition-all duration-500">
+          <div className="absolute -top-32 -right-32 w-64 h-64 bg-primary/5 rounded-full blur-3xl pointer-events-none group-hover:bg-primary/10 transition-colors duration-700" />
+          <SectionHeader icon={<Activity className="h-5 w-5" />} title="Number Allocations (Last 7 Days)" />
           {stats.weekTrend.length > 0 ? (
-            <TrendChart data={stats.weekTrend} />
+            <div className="relative z-10">
+              <TrendChart data={stats.weekTrend} />
+            </div>
           ) : (
-            <div className="h-36 flex items-center justify-center text-sm text-muted-foreground">
+            <div className="h-40 flex items-center justify-center text-sm text-muted-foreground relative z-10 font-medium">
               No trend data available
             </div>
           )}
-          <div className="mt-3 flex flex-wrap gap-3 justify-end">
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <div className="w-3 h-3 rounded-sm bg-primary/60" />
+          <div className="mt-4 flex flex-wrap gap-4 justify-end relative z-10">
+            <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              <div className="w-4 h-4 rounded shadow-sm bg-primary" />
               Allocations
             </div>
           </div>

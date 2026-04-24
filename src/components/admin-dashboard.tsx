@@ -3,11 +3,12 @@
 import { useState, useRef } from 'react';
 import {
   Menu, X, Users, Palette, AlertTriangle, Settings, CreditCard,
-  LogOut, LayoutDashboard, Globe, UserCheck, BarChart3, ShieldOff, Banknote, Bell,
+  LogOut, LayoutDashboard, Globe, UserCheck, BarChart3, ShieldOff, Banknote, Bell, Database
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { logout } from '@/app/actions';
 import Link from 'next/link';
+import { ThemeToggle } from '@/components/theme-toggle';
 
 const OverviewTab = dynamic(() => import('./admin/overview-tab').then(m => ({ default: m.OverviewTab })));
 const UserManagementTab = dynamic(() => import('./admin/user-management-tab').then(m => ({ default: m.UserManagementTab })));
@@ -19,6 +20,7 @@ const AgentManagementTab = dynamic(() => import('./admin/agent-management-tab').
 const BlockedAppsTab = dynamic(() => import('./admin/blocked-apps-tab').then(m => ({ default: m.BlockedAppsTab })));
 const PaymentMethodsTab = dynamic(() => import('./admin/payment-methods-tab').then(m => ({ default: m.PaymentMethodsTab })));
 const NotificationsTab = dynamic(() => import('./admin/notifications-tab').then(m => ({ default: m.NotificationsTab })));
+const SystemSettingsTab = dynamic(() => import('./admin/system-settings-tab').then(m => ({ default: m.SystemSettingsTab })));
 import { useSettings } from '@/contexts/settings-provider';
 
 const ADMIN_NAV = [
@@ -28,10 +30,7 @@ const ADMIN_NAV = [
   { id: 'payments',    label: 'Payments',       icon: CreditCard },
   { id: 'paymentMethods', label: 'Payment Methods', icon: Banknote },
   { id: 'notifications', label: 'Notifications',   icon: Bell },
-  { id: 'appearance',  label: 'Appearance',     icon: Palette },
-  { id: 'blockedApps', label: 'Blocked Apps',   icon: ShieldOff },
-  { id: 'errors',      label: 'Custom Errors',  icon: AlertTriangle },
-  { id: 'settings',    label: 'Settings',       icon: Settings },
+  { id: 'systemSettings', label: 'System Settings', icon: Settings },
 ];
 
 export function AdminDashboard() {
@@ -52,10 +51,7 @@ export function AdminDashboard() {
       case 'payments': return <PaymentManagementTab />;
       case 'paymentMethods': return <PaymentMethodsTab />;
       case 'notifications': return <NotificationsTab />;
-      case 'appearance': return <AppearanceTab />;
-      case 'blockedApps': return <BlockedAppsTab />;
-      case 'errors': return <ErrorManagementTab />;
-      case 'settings': return <SettingsTab />;
+      case 'systemSettings': return <SystemSettingsTab />;
       default: return <OverviewTab />;
     }
   };
@@ -74,16 +70,18 @@ export function AdminDashboard() {
 
       {/* Sidebar */}
       <aside
-        className={`fixed top-0 left-0 h-full w-72 z-50 bg-card border-r border-border shadow-lg flex flex-col transition-transform duration-300 ease-in-out lg:translate-x-0 ${
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        className={`fixed top-4 bottom-4 left-4 h-[calc(100vh-2rem)] w-64 z-50 rounded-[2rem] glass-panel border-primary/20 shadow-[10px_0_40px_-10px_hsl(var(--primary)/0.15)] flex flex-col transition-transform duration-300 ease-in-out lg:translate-x-0 overflow-hidden ${
+          sidebarOpen ? 'translate-x-0' : '-translate-x-[120%]'
         }`}
       >
+        <div className="absolute inset-0 bg-gradient-to-b from-primary/10 via-transparent to-transparent opacity-50 pointer-events-none" />
+        
         {/* Brand */}
-        <div className="flex items-center justify-between px-5 py-5">
+        <div className="flex items-center justify-between px-5 py-6 relative z-10">
           <div className="flex items-center gap-2.5">
             <Globe className="h-7 w-7 text-primary" />
             <div>
-              <span className="text-xl font-extrabold text-primary tracking-wide">{siteName}</span>
+              <span className="text-xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-primary to-secondary tracking-wide">{siteName}</span>
               <div className="mt-0.5">
                 <span className="text-[10px] font-semibold bg-red-100 text-red-600 px-2 py-0.5 rounded-md">
                   ADMIN
@@ -108,14 +106,15 @@ export function AdminDashboard() {
               <button
                 key={item.id}
                 onClick={() => { setActiveTab(item.id); setSidebarOpen(false); }}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
+                className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl text-sm font-bold transition-all duration-300 relative overflow-hidden group ${
                   isActive
-                    ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20'
-                    : 'text-muted-foreground hover:bg-primary/10 hover:text-primary'
+                    ? 'bg-primary/20 text-primary border border-primary/30 shadow-[0_0_20px_-5px_hsl(var(--primary)/0.3)] backdrop-blur-md'
+                    : 'text-muted-foreground hover:bg-white/5 hover:text-foreground border border-transparent'
                 }`}
               >
-                <Icon className={`h-5 w-5 ${isActive ? 'text-primary-foreground' : 'text-primary'}`} />
-                {item.label}
+                {isActive && <div className="absolute inset-0 bg-gradient-to-r from-primary/10 to-transparent pointer-events-none" />}
+                <Icon className={`h-5 w-5 relative z-10 transition-transform duration-300 ${isActive ? 'text-primary-foreground scale-110 drop-shadow-[0_0_8px_hsl(var(--primary)/0.8)]' : 'text-primary group-hover:scale-110'}`} />
+                <span className="relative z-10">{item.label}</span>
               </button>
             );
           })}
@@ -142,8 +141,8 @@ export function AdminDashboard() {
       </aside>
 
       {/* Header */}
-      <header className="sticky top-0 z-30 bg-background/95 backdrop-blur-md border-b border-border lg:pl-72">
-        <div className="flex items-center justify-between px-4 py-3 max-w-7xl mx-auto w-full">
+      <header className="sticky top-4 z-30 glass-panel rounded-full mx-4 lg:ml-72 lg:mr-8 mb-8 border border-white/10 shadow-lg">
+        <div className="flex items-center justify-between px-6 py-3 w-full">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setSidebarOpen(true)}
@@ -151,23 +150,26 @@ export function AdminDashboard() {
             >
               <Menu className="h-5 w-5" />
             </button>
-            <h1 className="text-lg font-extrabold text-primary tracking-wide">Admin Panel</h1>
+            <h1 className="text-lg font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-primary to-secondary tracking-wide">Admin Panel</h1>
           </div>
-          <span className="text-[10px] font-semibold bg-red-100 text-red-600 px-2 py-0.5 rounded-md">
-            ADMIN MODE
-          </span>
+          <div className="flex items-center gap-4">
+            <ThemeToggle />
+            <span className="text-[10px] font-semibold bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 px-2 py-1 rounded-md hidden sm:block">
+              ADMIN MODE
+            </span>
+          </div>
         </div>
       </header>
 
       {/* Content */}
-      <main className="px-4 py-6 max-w-7xl mx-auto lg:pl-72 overflow-x-hidden">
+      <main className="px-4 py-2 max-w-7xl mx-auto lg:ml-72">
         {renderContent()}
       </main>
 
       {/* Footer */}
       {processedFooter && (
-        <footer className="border-t border-border bg-background/80 lg:pl-72">
-          <div className="px-4 py-4 max-w-7xl mx-auto text-center text-xs text-muted-foreground">
+        <footer className="relative mt-12 mb-4 mx-4 lg:ml-72 lg:mr-8 glass-panel rounded-2xl">
+          <div className="px-4 py-4 text-center text-xs text-muted-foreground">
             {processedFooter}
           </div>
         </footer>

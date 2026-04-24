@@ -140,7 +140,7 @@ export function PaymentPage({ userId, walletBalance, currency, paymentNetwork, m
   };
 
   const handleCopy = (text: string, id: string) => {
-    navigator.clipboard.writeText(text);
+    try { navigator.clipboard.writeText(text); } catch {}
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
   };
@@ -148,22 +148,29 @@ export function PaymentPage({ userId, walletBalance, currency, paymentNetwork, m
   return (
     <div className="space-y-5">
       {/* Balance Card */}
-      <div className="bg-card border border-border rounded-2xl p-5 shadow-sm">
-        <div className="flex items-center gap-2 mb-4">
-          <Wallet className="h-5 w-5 text-primary" />
-          <h3 className="text-base font-bold text-primary">Your Balance</h3>
+      <div className="glass-panel border border-border/50 rounded-3xl p-6 sm:p-8 relative overflow-hidden group hover:shadow-[0_0_30px_-5px_hsl(var(--primary)/0.3)] transition-all duration-500">
+        <div className="absolute -inset-4 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none" />
+        <div className="flex items-center justify-between mb-4 relative z-10">
+          <div className="flex items-center gap-2.5">
+            <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center">
+              <Wallet className="h-5 w-5 text-primary" />
+            </div>
+            <h3 className="text-sm font-bold uppercase tracking-widest text-primary">Your Balance</h3>
+          </div>
         </div>
-        <div className="text-center py-4">
-          <p className="text-4xl font-extrabold text-foreground">{currency} {balance.toFixed(2)}</p>
-          <p className="text-sm text-muted-foreground mt-1">Available for withdrawal</p>
+        <div className="py-2 relative z-10">
+          <p className="text-4xl sm:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-br from-foreground to-foreground/70 tracking-tight">{currency} {balance.toFixed(2)}</p>
+          <p className="text-sm font-medium text-muted-foreground mt-2 uppercase tracking-wider">Available for withdrawal</p>
         </div>
       </div>
 
       {/* Wallet Setup */}
-      <div className="bg-card border border-border rounded-2xl p-5 shadow-sm">
-        <div className="flex items-center gap-2 mb-4">
-          <Save className="h-5 w-5 text-primary" />
-          <h3 className="text-base font-bold text-primary">Wallet Setup</h3>
+      <div className="glass-panel border border-border/50 rounded-3xl p-6 sm:p-8 relative z-10">
+        <div className="flex items-center gap-2.5 mb-6">
+          <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center">
+            <Save className="h-5 w-5 text-primary" />
+          </div>
+          <h3 className="text-sm font-bold uppercase tracking-widest text-primary">Wallet Setup</h3>
         </div>
 
         {loadingWallets ? (
@@ -178,7 +185,7 @@ export function PaymentPage({ userId, walletBalance, currency, paymentNetwork, m
                   value={wallets[m.id] || ''}
                   onChange={(e) => setWallets(prev => ({ ...prev, [m.id]: e.target.value }))}
                   placeholder={m.placeholder}
-                  className="w-full px-3 py-2.5 rounded-xl border border-border bg-muted text-sm font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-primary transition"
+                  className="w-full px-4 py-3 rounded-xl border border-border/50 bg-background/50 text-sm font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition backdrop-blur-md"
                 />
               </div>
             ))}
@@ -193,7 +200,7 @@ export function PaymentPage({ userId, walletBalance, currency, paymentNetwork, m
             <button
               onClick={handleSaveWallets}
               disabled={savingWallets}
-              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-secondary text-secondary-foreground hover:bg-secondary/80 font-semibold text-sm transition-all disabled:opacity-50"
+              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-secondary text-secondary-foreground hover:bg-secondary/80 font-bold text-sm transition-all disabled:opacity-50 mt-2"
             >
               {savingWallets ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               {savingWallets ? 'Saving...' : 'Save Wallets'}
@@ -203,10 +210,12 @@ export function PaymentPage({ userId, walletBalance, currency, paymentNetwork, m
       </div>
 
       {/* Withdrawal Form */}
-      <div className="bg-card border border-border rounded-2xl p-5 shadow-sm">
-        <div className="flex items-center gap-2 mb-4">
-          <Send className="h-5 w-5 text-primary" />
-          <h3 className="text-base font-bold text-primary">Request Withdrawal</h3>
+      <div className="glass-panel border border-border/50 rounded-3xl p-6 sm:p-8 relative z-10">
+        <div className="flex items-center gap-2.5 mb-6">
+          <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center">
+            <Send className="h-5 w-5 text-primary" />
+          </div>
+          <h3 className="text-sm font-bold uppercase tracking-widest text-primary">Request Withdrawal</h3>
         </div>
 
         <div className="space-y-4">
@@ -222,21 +231,21 @@ export function PaymentPage({ userId, walletBalance, currency, paymentNetwork, m
                 <button
                   type="button"
                   onClick={() => setShowDropdown(!showDropdown)}
-                  className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-border bg-muted text-sm text-foreground hover:border-primary/30 transition"
+                  className="w-full flex items-center justify-between px-4 py-3.5 rounded-xl border border-border/50 bg-background/50 text-sm text-foreground hover:border-primary/50 transition backdrop-blur-md"
                 >
-                  <span className={selectedWalletInfo ? 'font-medium truncate' : 'text-muted-foreground'}>
+                  <span className={selectedWalletInfo ? 'font-bold truncate' : 'text-muted-foreground'}>
                     {selectedWalletInfo ? `${selectedWalletInfo.name} — ${selectedWalletAddress}` : 'Choose a wallet...'}
                   </span>
                   <ChevronDown className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                 </button>
                 {showDropdown && (
-                  <div className="absolute top-full left-0 right-0 mt-1 bg-card border border-border rounded-xl shadow-lg z-20 overflow-hidden">
+                  <div className="absolute top-full left-0 right-0 mt-2 bg-background/90 backdrop-blur-xl border border-border/50 rounded-xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.3)] z-30 overflow-hidden">
                     {availableWallets.map((m, i) => (
                       <button
                         key={m.id}
                         type="button"
                         onClick={() => { setSelectedWallet(m.id); setShowDropdown(false); setError(null); }}
-                        className={`w-full text-left px-4 py-3 text-sm hover:bg-primary/10 transition ${
+                        className={`w-full text-left px-4 py-3.5 text-sm hover:bg-primary/20 transition ${
                           selectedWallet === m.id ? 'bg-primary/10 text-primary font-semibold' : 'text-foreground'
                         } ${i > 0 ? 'border-t border-border/50' : ''}`}
                       >
@@ -289,11 +298,13 @@ export function PaymentPage({ userId, walletBalance, currency, paymentNetwork, m
       </div>
 
       {/* Payment History */}
-      <div className="bg-card border border-border rounded-2xl p-5 shadow-sm overflow-hidden">
-        <div className="flex items-center gap-2 mb-4">
-          <Clock className="h-5 w-5 text-primary" />
-          <h3 className="text-base font-bold text-primary">Payment History</h3>
-          <span className="text-xs text-muted-foreground ml-auto">{records.length} total</span>
+      <div className="glass-panel border border-border/50 rounded-3xl p-6 sm:p-8 shadow-sm overflow-hidden relative z-10">
+        <div className="flex items-center gap-2.5 mb-6">
+          <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center">
+            <Clock className="h-5 w-5 text-primary" />
+          </div>
+          <h3 className="text-sm font-bold uppercase tracking-widest text-primary">Payment History</h3>
+          <span className="text-[10px] sm:text-xs font-semibold text-muted-foreground ml-auto bg-muted px-2.5 py-1 rounded-full">{records.length} total</span>
         </div>
 
         {/* Desktop Table */}
@@ -311,11 +322,11 @@ export function PaymentPage({ userId, walletBalance, currency, paymentNetwork, m
               {loadingRecords ? (
                 <tr><td colSpan={4} className="py-12 text-center"><Loader2 className="h-6 w-6 animate-spin text-primary mx-auto" /></td></tr>
               ) : records.length === 0 ? (
-                <tr><td colSpan={4} className="py-12 text-center text-sm text-muted-foreground">No payment requests yet</td></tr>
+                <tr><td colSpan={4} className="py-12 text-center text-sm font-medium text-muted-foreground">No payment requests yet</td></tr>
               ) : (
                 records.map((rec) => (
-                  <tr key={rec.id} className="border-b border-border/50 last:border-0 hover:bg-muted/50">
-                    <td className="py-3 pr-3"><p className="text-sm font-bold text-foreground">{rec.currency} {rec.amount.toFixed(2)}</p></td>
+                  <tr key={rec.id} className="border-b border-border/30 last:border-0 hover:bg-muted/30 transition-colors">
+                    <td className="py-4 pr-3"><p className="text-sm font-black text-foreground tracking-tight">{rec.currency} {rec.amount.toFixed(2)}</p></td>
                     <td className="py-3 pr-3">
                       <div className="flex items-center gap-1 min-w-0">
                         <p className="text-xs font-mono text-foreground truncate max-w-[180px]">{rec.walletAddress}</p>
@@ -329,8 +340,8 @@ export function PaymentPage({ userId, walletBalance, currency, paymentNetwork, m
                       <StatusBadge status={rec.status} />
                       {rec.adminNote && <p className="text-[10px] text-muted-foreground mt-0.5 truncate max-w-[120px]">{rec.adminNote}</p>}
                     </td>
-                    <td className="py-3">
-                      <p className="text-[10px] text-muted-foreground">
+                    <td className="py-4">
+                      <p className="text-[11px] font-medium text-muted-foreground">
                         {new Date(rec.createdAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })}
                       </p>
                     </td>
