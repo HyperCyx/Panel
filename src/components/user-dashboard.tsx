@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useTransition } from 'react';
 import {
   Menu, X, Bell, LayoutDashboard, LogOut, ShieldCheck,
   Smartphone, Globe, Code, Trophy, Target, ClipboardList, Wifi,
@@ -72,6 +72,7 @@ export function DashboardShell({ user, siteName, children }: DashboardShellProps
   const [editName, setEditName] = useState(user.name ?? '');
   const [editEmail, setEditEmail] = useState(user.email ?? '');
   const [isUpdating, setIsUpdating] = useState(false);
+  const [isPending, startTransition] = useTransition();
   const { toast } = useToast();
   const { footerText, siteName: ctxSiteName, siteVersion } = useSettings();
   const [unreadCount, setUnreadCount] = useState(0);
@@ -175,15 +176,14 @@ export function DashboardShell({ user, siteName, children }: DashboardShellProps
 
         {/* Logout */}
         <div className="px-3 py-4 border-t border-border">
-          <form action={logout}>
-            <button
-              type="submit"
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-red-400 hover:bg-red-500/10 transition-colors"
-            >
-              <LogOut className="h-5 w-5" />
-              Logout
-            </button>
-          </form>
+          <button
+            onClick={() => startTransition(() => logout())}
+            disabled={isPending}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50"
+          >
+            {isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <LogOut className="h-5 w-5" />}
+            Logout
+          </button>
         </div>
       </aside>
 
@@ -244,18 +244,17 @@ export function DashboardShell({ user, siteName, children }: DashboardShellProps
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   className="cursor-pointer text-red-500 focus:text-red-600"
+                  disabled={isPending}
                   onSelect={(e) => {
                     e.preventDefault();
-                    const form = document.getElementById('header-logout-form') as HTMLFormElement | null;
-                    form?.requestSubmit();
+                    startTransition(() => logout());
                   }}
                 >
-                  <LogOut className="mr-2 h-4 w-4" />
+                  {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LogOut className="mr-2 h-4 w-4" />}
                   Logout
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            <form id="header-logout-form" action={logout} className="hidden" />
           </div>
         </div>
       </header>

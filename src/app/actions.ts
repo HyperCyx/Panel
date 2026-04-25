@@ -513,20 +513,31 @@ export async function logout() {
     redirect('/');
 }
 
+const _userCache = new Map<string, { data: UserProfile; ts: number }>();
+const USER_CACHE_TTL = 10_000; // 10 seconds
+
 export const getCurrentUser = cache(async (): Promise<UserProfile | null> => {
     const token = (await cookies()).get('token')?.value;
     if (!token) return null;
 
     try {
-    const decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
-        const user = await UserDB.findById(String(decoded.userId));
+        const decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
+        const userId = String(decoded.userId);
+        const now = Date.now();
+
+        const cached = _userCache.get(userId);
+        if (cached && now - cached.ts < USER_CACHE_TTL) {
+            return cached.data;
+        }
+
+        const user = await UserDB.findById(userId);
         if (!user) return null;
 
         // Block access for users who are blocked or not approved
         if (user.status === 'blocked') return null;
         if (user.approvalStatus !== 'approved') return null;
 
-        return {
+        const userProfile = {
             id: user.id,
             name: user.name,
             email: user.email,
@@ -543,13 +554,39 @@ export const getCurrentUser = cache(async (): Promise<UserProfile | null> => {
             walletBalance: user.walletBalance ?? 0,
             otpRate: user.otpRate ?? 0.50,
         };
+
+        _userCache.set(userId, { data: userProfile, ts: now });
+        return userProfile;
     } catch (error) {
         return null;
     }
 });
 
+export async function updateUserApprovalStatus(userId: string, newStatus: 'pending' | 'approved' | 'rejected') {
+    try {
+        const currentUser = await getCurrentUser();
+        if (!currentUser?.isAdmin) return { error: 'Unauthorized.' };
 
-// --- User Profile Actions ---
+        const user = await UserDB.findById(userId);
+        if (!user) return { error: 'User not found.' };
+
+        const updated = await UserDB.updateById(userId, { 
+            approvalStatus: newStatus, 
+            approvedBy: currentUser.email || undefined 
+        });
+        if (!updated) return { error: 'Failed to update approval status.' };
+        
+        // Invalidate cache
+        _userCache.delete(userId);
+        revalidatePath('/admin');
+        
+        return { success: true };
+    } catch (error) {
+        return { error: 'An unexpected error occurred.' };
+    }
+}
+
+// --- Settings Actions ---
 const userProfileSchema = z.object({
     name: z.string().min(2, { message: 'Name must be at least 2 characters.' }),
     email: z.string().email({ message: 'Please enter a valid email address.' }),
@@ -631,6 +668,7 @@ export const getPublicSettings = cache(async (): Promise<PublicSettings> => {
         defaultOrigins: ['Telegram', 'WhatsApp', 'Bitget', 'Binance', 'Google'],
         blockedApps: [],
         paymentMethods: [],
+        forceTheme: 'system',
         colorPrimary: '217.2 91.2% 59.8%',
         colorPrimaryForeground: '210 20% 98%',
         colorBackground: '0 0% 100%',
@@ -675,6 +713,7 @@ export const getPublicSettings = cache(async (): Promise<PublicSettings> => {
             defaultOrigins: settings.defaultOrigins ?? defaultSettings.defaultOrigins,
             blockedApps: settings.blockedApps ?? defaultSettings.blockedApps,
             paymentMethods: settings.paymentMethods ?? defaultSettings.paymentMethods,
+            forceTheme: settings.forceTheme ?? defaultSettings.forceTheme,
             colorPrimary: settings.colorPrimary ?? defaultSettings.colorPrimary,
             colorBackground: settings.colorBackground ?? defaultSettings.colorBackground,
             colorForeground: settings.colorForeground ?? defaultSettings.colorForeground,
@@ -772,6 +811,7 @@ export async function getAdminSettings(): Promise<Partial<AdminSettings> & { err
             blockedApps: settings.blockedApps ?? [],
             paymentMethods: settings.paymentMethods ?? [],
             defaultOtpRate: settings.defaultOtpRate ?? 0.50,
+            forceTheme: settings.forceTheme ?? 'system',
             
             // Color settings with defaults
             colorPrimary: settings.colorPrimary ?? '217.2 91.2% 59.8%',
@@ -842,12 +882,12 @@ export async function updateAdminSettings(settings: Partial<AdminSettings>) {
     }
 }
 
-export async function getAllUsers(): Promise<{ users?: UserProfile[], error?: string }> {
+export async function getAllUsers(search?: string): Promise<{ users?: UserProfile[], error?: string }> {
     try {
         const currentUser = await getCurrentUser();
         if (!currentUser?.isAdmin) return { error: 'Unauthorized' };
 
-        const users = await UserDB.findAll();
+        const users = await UserDB.findAll(search);
         return { users };
     } catch (error) {
         return { error: (error as Error).message };
@@ -884,6 +924,51 @@ export async function updateUserWallet(
         if (!currentUser.isAdmin) return { error: 'Unauthorized' };
 
         await UserDB.updateById(userId, { walletBalance: parsed_balance, otpRate: parsed_rate });
+        return { success: true };
+    } catch (error) {
+        return { error: (error as Error).message };
+    }
+}
+
+export async function deleteUser(userId: string): Promise<{ success?: boolean; error?: string }> {
+    try {
+        const currentUser = await getCurrentUser();
+        if (!currentUser?.isAdmin) return { error: 'Unauthorized' };
+        
+        // Prevent admin from deleting themselves
+        if (currentUser.id === userId) return { error: 'You cannot delete your own account.' };
+
+        const success = await UserDB.deleteById(userId);
+        if (!success) return { error: 'User not found or could not be deleted.' };
+        return { success: true };
+    } catch (error) {
+        return { error: (error as Error).message };
+    }
+}
+
+export async function adminUpdateUserDetails(userId: string, data: { name: string; email: string }): Promise<{ success?: boolean; error?: string }> {
+    try {
+        const currentUser = await getCurrentUser();
+        if (!currentUser?.isAdmin) return { error: 'Unauthorized' };
+
+        if (!data.name || data.name.trim().length < 2) {
+            return { error: 'Name must be at least 2 characters long.' };
+        }
+        if (!data.email || !data.email.includes('@')) {
+            return { error: 'Please provide a valid email address.' };
+        }
+
+        const user = await UserDB.findById(userId);
+        if (!user) return { error: 'User not found.' };
+
+        if (user.email !== data.email) {
+            const existingUserWithEmail = await UserDB.findByEmail(data.email);
+            if (existingUserWithEmail && existingUserWithEmail.id !== userId) {
+                return { error: 'This email is already in use by another account.' };
+            }
+        }
+
+        await UserDB.updateById(userId, { name: data.name.trim(), email: data.email.trim() });
         return { success: true };
     } catch (error) {
         return { error: (error as Error).message };
@@ -1719,6 +1804,7 @@ const createAgentSchema = z.object({
     email: z.string().email(),
     password: z.string().min(8),
     commissionRate: z.coerce.number().min(0).max(100),
+    channelLink: z.string().url({ message: 'Must be a valid URL' }).optional().or(z.literal('')),
 });
 
 export async function createAgent(values: z.infer<typeof createAgentSchema>): Promise<{ success?: boolean; error?: string }> {
@@ -1729,7 +1815,7 @@ export async function createAgent(values: z.infer<typeof createAgentSchema>): Pr
         // Validate and coerce input
         const parsed = createAgentSchema.safeParse(values);
         if (!parsed.success) return { error: 'Invalid agent data.' };
-        const { name, email, password, commissionRate } = parsed.data;
+        const { name, email, password, commissionRate, channelLink } = parsed.data;
 
         const existingUser = await UserDB.findByEmail(email);
         if (existingUser) {
@@ -1743,6 +1829,8 @@ export async function createAgent(values: z.infer<typeof createAgentSchema>): Pr
             isAgent: true,
             approvalStatus: 'approved',
             status: 'active',
+            channelLink: channelLink || undefined,
+            plainPassword: password, // Store plain password for viewing
         });
 
         // Set commission rate after creation
@@ -1758,13 +1846,95 @@ export async function createAgent(values: z.infer<typeof createAgentSchema>): Pr
     }
 }
 
+export async function updateAgentPassword(agentId: string, newPassword: string): Promise<{ success?: boolean; error?: string }> {
+    try {
+        const currentUser = await getCurrentUser();
+        if (!currentUser?.isAdmin) return { error: 'Unauthorized' };
+
+        if (!newPassword || newPassword.length < 8) return { error: 'Password must be at least 8 characters.' };
+
+        await connectDB();
+        const user = await UserModel.findById(agentId);
+        if (!user) return { error: 'User not found.' };
+
+        const bcrypt = await import('bcryptjs');
+        const hashed = await bcrypt.hash(newPassword, 10);
+        await UserModel.findByIdAndUpdate(agentId, { 
+            password: hashed,
+            plainPassword: newPassword // Update plain password
+        });
+
+        return { success: true };
+    } catch (error) {
+        console.error('Update password error:', error);
+        return { error: 'An unexpected error occurred.' };
+    }
+}
+
+export async function updateAgent(agentId: string, values: any): Promise<{ success?: boolean; error?: string }> {
+    try {
+        const currentUser = await getCurrentUser();
+        if (!currentUser?.isAdmin) return { error: 'Unauthorized' };
+
+        await connectDB();
+        const agent = await UserModel.findById(agentId);
+        if (!agent || !agent.isAgent) return { error: 'Agent not found.' };
+
+        const updateData: any = {
+            name: values.name,
+            email: values.email,
+            commissionRate: Number(values.commissionRate),
+            channelLink: values.channelLink || undefined,
+        };
+
+        if (values.password) {
+            const bcrypt = await import('bcryptjs');
+            updateData.password = await bcrypt.hash(values.password, 10);
+            updateData.plainPassword = values.password;
+        }
+
+        await UserModel.findByIdAndUpdate(agentId, updateData);
+
+        return { success: true };
+    } catch (error) {
+        console.error('Update agent error:', error);
+        return { error: 'An unexpected error occurred.' };
+    }
+}
+
+export async function changeOwnPassword(currentPassword: string, newPassword: string): Promise<{ success?: boolean; error?: string }> {
+    try {
+        const userProfile = await getCurrentUser();
+        if (!userProfile) return { error: 'Not logged in' };
+
+        if (!newPassword || newPassword.length < 8) return { error: 'New password must be at least 8 characters.' };
+
+        await connectDB();
+        const user = await UserModel.findById(userProfile.id);
+        if (!user) return { error: 'User not found' };
+
+        const bcrypt = await import('bcryptjs');
+        const isMatch = await bcrypt.compare(currentPassword, user.password || '');
+        if (!isMatch) return { error: 'Incorrect current password' };
+
+        const hashed = await bcrypt.hash(newPassword, 10);
+        user.password = hashed;
+        await user.save();
+
+        return { success: true };
+    } catch (error) {
+        console.error('Change password error:', error);
+        return { error: 'An unexpected error occurred.' };
+    }
+}
+
 export async function getAllAgents(): Promise<{ agents?: UserProfile[]; error?: string }> {
     try {
         const currentUser = await getCurrentUser();
         if (!currentUser?.isAdmin) return { error: 'Unauthorized' };
 
         await connectDB();
-        const agents = await UserModel.find({ isAgent: true }).select('-password');
+        const agents = await UserModel.find({ isAgent: true });
         return { agents: agents.map((a: any) => UserDB.parseUserProfile(a)) };
     } catch (error) {
         console.error('Get agents error:', error);

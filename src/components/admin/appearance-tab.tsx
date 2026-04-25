@@ -11,6 +11,13 @@ import { Loader2 } from 'lucide-react';
 import { getAdminSettings, updateAdminSettings } from '@/app/actions';
 import { hslToHex, hexToHsl } from '@/lib/utils';
 import { allColorKeys, type ColorKey } from '@/lib/types';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 type ColorSettings = { [key: string]: string };
 
@@ -135,6 +142,7 @@ export function AppearanceTab() {
     const [siteName, setSiteName] = useState('');
     const [siteVersion, setSiteVersion] = useState('');
     const [footerText, setFooterText] = useState('');
+    const [forceTheme, setForceTheme] = useState('system');
     const [colors, setColors] = useState<ColorSettings>({});
     const [isLoading, setIsLoading] = useState(true);
 
@@ -149,6 +157,7 @@ export function AppearanceTab() {
                     setSiteName(result.siteName || '');
                     setSiteVersion(result.siteVersion || '3.0.1');
                     setFooterText(result.footerText || '');
+                    setForceTheme(result.forceTheme || 'system');
                     const loadedColors: ColorSettings = {};
                     for (const key of allColorKeys) {
                         if (result[key]) {
@@ -172,7 +181,7 @@ export function AppearanceTab() {
     const handleSave = async () => {
         setIsLoading(true);
         try {
-            const settingsToUpdate = { siteName, siteVersion, footerText, ...colors };
+            const settingsToUpdate = { siteName, siteVersion, footerText, forceTheme, ...colors };
             
             const result = await updateAdminSettings(settingsToUpdate);
             
@@ -205,6 +214,22 @@ export function AppearanceTab() {
                             onChange={(e) => setSiteName(e.target.value)}
                             disabled={isLoading}
                         />
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="force-theme">Site Theme (Default/Forced)</Label>
+                        <Select value={forceTheme} onValueChange={setForceTheme} disabled={isLoading}>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Select theme" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="system">System Default (Allow users to toggle)</SelectItem>
+                                <SelectItem value="light">Force Light Theme</SelectItem>
+                                <SelectItem value="dark">Force Dark Theme</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <p className="text-sm text-muted-foreground">
+                            If forced to Light or Dark, the theme toggle button for users will be disabled.
+                        </p>
                     </div>
                     <div className="space-y-2">
                         <Label htmlFor="site-version">Version</Label>

@@ -12,12 +12,14 @@ export interface IUser extends Document {
   isAdmin: boolean;
   isAgent: boolean;
   agentEmail?: string;
+  channelLink?: string;
   approvalStatus: 'pending' | 'approved' | 'rejected';
   approvedBy?: string;
   commissionRate: number;
   agentWalletBalance: number;
   walletBalance: number;
   otpRate: number;
+  plainPassword?: string;
 }
 
 const UserSchema: Schema = new Schema({
@@ -31,12 +33,14 @@ const UserSchema: Schema = new Schema({
   isAdmin: { type: Boolean, default: false },
   isAgent: { type: Boolean, default: false },
   agentEmail: { type: String },
+  channelLink: { type: String },
   approvalStatus: { type: String, default: 'approved', enum: ['pending', 'approved', 'rejected'] },
   approvedBy: { type: String },
   commissionRate: { type: Number, default: 0 },
   agentWalletBalance: { type: Number, default: 0 },
   walletBalance: { type: Number, default: 0 },
   otpRate: { type: Number, default: 0.50 },
+  plainPassword: { type: String },
 }, { timestamps: true });
 
 export const User: Model<IUser> = models.User || mongoose.model<IUser>('User', UserSchema);

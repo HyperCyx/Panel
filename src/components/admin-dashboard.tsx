@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useTransition } from 'react';
 import {
   Menu, X, Users, Palette, AlertTriangle, Settings, CreditCard,
-  LogOut, LayoutDashboard, Globe, UserCheck, BarChart3, ShieldOff, Banknote, Bell, Database
+  LogOut, LayoutDashboard, Globe, UserCheck, BarChart3, ShieldOff, Banknote, Bell, Database, Loader2
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { logout } from '@/app/actions';
@@ -36,7 +36,7 @@ const ADMIN_NAV = [
 export function AdminDashboard() {
   const [activeTab, setActiveTab] = useState('overview');
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const logoutFormRef = useRef<HTMLFormElement>(null);
+  const [isPending, startTransition] = useTransition();
   const { siteName, footerText } = useSettings();
 
   const processedFooter = (footerText || '')
@@ -58,7 +58,6 @@ export function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <form ref={logoutFormRef} action={logout} className="hidden" />
 
       {/* Sidebar Backdrop */}
       {sidebarOpen && (
@@ -131,10 +130,11 @@ export function AdminDashboard() {
         {/* Logout */}
         <div className="px-3 py-4 border-t border-border">
           <button
-            onClick={() => logoutFormRef.current?.requestSubmit()}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-red-400 hover:bg-red-500/10 transition-colors"
+            onClick={() => startTransition(() => logout())}
+            disabled={isPending}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50"
           >
-            <LogOut className="h-5 w-5" />
+            {isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <LogOut className="h-5 w-5" />}
             Admin Logout
           </button>
         </div>

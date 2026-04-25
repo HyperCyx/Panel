@@ -46,7 +46,7 @@ export default async function RootLayout({
           <style dangerouslySetInnerHTML={{ __html: generateThemeStyles() }} />
       </head>
       <body className="antialiased transition-colors duration-500">
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+        <ThemeProvider attribute="class" defaultTheme={settings.forceTheme === 'system' ? 'system' : settings.forceTheme} forcedTheme={settings.forceTheme === 'system' ? undefined : settings.forceTheme} enableSystem disableTransitionOnChange>
           <SettingsProvider value={{ siteName: settings.siteName, siteVersion: settings.siteVersion || '3.0.1', footerText: settings.footerText || '', currency: settings.currency || '৳' }}>
               <AuthProvider initialUser={user}>
               {children}

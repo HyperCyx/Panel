@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Wallet, Send, Loader2, CheckCircle2, Clock,
-  AlertCircle, Copy, Check, Save, ChevronDown,
+  AlertCircle, Copy, Check, Save, ChevronDown, ArrowDownToLine, X,
 } from 'lucide-react';
 import { createPaymentRequest, getUserPaymentRequests, getUserWallets, saveUserWallets } from '@/app/actions';
 import type { PaymentRequestInfo, UserWalletInfo, PaymentMethod } from '@/lib/types';
@@ -45,13 +45,21 @@ export function PaymentPage({ userId, walletBalance, currency, paymentNetwork, m
   const [savingWallets, setSavingWallets] = useState(false);
   const [walletSaveMsg, setWalletSaveMsg] = useState<string | null>(null);
 
+  // Deposit section
+  const [depositMethod, setDepositMethod] = useState<PaymentMethod | null>(null);
+  const [depositDropdown, setDepositDropdown] = useState(false);
+  const [depositCopied, setDepositCopied] = useState(false);
+
   // Withdrawal form
-  const [selectedWallet, setSelectedWallet] = useState('');
+  const [withdrawalMethodId, setWithdrawalMethodId] = useState('');
   const [amount, setAmount] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [showDropdown, setShowDropdown] = useState(false);
+  const [withdrawalDropdownOpen, setWithdrawalDropdownOpen] = useState(false);
+  
+  const [setupMethodId, setSetupMethodId] = useState('');
+  const [setupDropdownOpen, setSetupDropdownOpen] = useState(false);
 
   // History
   const [records, setRecords] = useState<PaymentRequestInfo[]>([]);
@@ -103,14 +111,16 @@ export function PaymentPage({ userId, walletBalance, currency, paymentNetwork, m
   };
 
   const availableWallets = enabledMethods.filter(m => wallets[m.id]?.trim());
-  const selectedWalletInfo = enabledMethods.find(m => m.id === selectedWallet);
-  const selectedWalletAddress = selectedWallet ? wallets[selectedWallet] : '';
+  const selectedWalletInfo = enabledMethods.find(m => m.id === withdrawalMethodId);
+  const selectedWalletAddress = withdrawalMethodId ? wallets[withdrawalMethodId] : '';
+  
+  const setupMethodInfo = enabledMethods.find(m => m.id === setupMethodId);
 
   const handleSubmit = async () => {
     setError(null);
     setSuccess(null);
 
-    if (!selectedWallet) { setError('Please select a wallet.'); return; }
+    if (!withdrawalMethodId) { setError('Please select a wallet.'); return; }
     if (!selectedWalletAddress) { setError('Selected wallet has no address.'); return; }
     const parsedAmount = parseFloat(amount);
     if (!parsedAmount || parsedAmount <= 0) { setError('Enter a valid amount.'); return; }
@@ -122,7 +132,7 @@ export function PaymentPage({ userId, walletBalance, currency, paymentNetwork, m
       const result = await createPaymentRequest({
         amount: parsedAmount,
         walletAddress: selectedWalletAddress,
-        walletType: selectedWalletInfo?.name || selectedWallet,
+        walletType: selectedWalletInfo?.name || withdrawalMethodId,
       });
       if (result.error) {
         setError(result.error);
@@ -137,6 +147,12 @@ export function PaymentPage({ userId, walletBalance, currency, paymentNetwork, m
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleCopyDeposit = (text: string) => {
+    try { navigator.clipboard.writeText(text); } catch {}
+    setDepositCopied(true);
+    setTimeout(() => setDepositCopied(false), 2000);
   };
 
   const handleCopy = (text: string, id: string) => {
@@ -164,6 +180,67 @@ export function PaymentPage({ userId, walletBalance, currency, paymentNetwork, m
         </div>
       </div>
 
+      {/* Deposit Section */}
+      {enabledMethods.some(m => m.adminAddress) && (
+        <div className="glass-panel border border-border/50 rounded-3xl p-6 sm:p-8 relative z-10">
+          <div className="flex items-center gap-2.5 mb-6">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center">
+              <ArrowDownToLine className="h-5 w-5 text-emerald-500" />
+            </div>
+            <h3 className="text-sm font-bold uppercase tracking-widest text-emerald-500">Add Balance (Deposit)</h3>
+          </div>
+          <p className="text-xs text-muted-foreground mb-4">Select a payment method to see the admin's receiving address. Send your payment there and contact admin to add balance.</p>
+
+          {/* Method Selector */}
+          <div className="relative mb-4">
+            <button
+              type="button"
+              onClick={() => setDepositDropdown(p => !p)}
+              className="w-full flex items-center justify-between px-4 py-3.5 rounded-xl border border-border/50 bg-background/50 text-sm text-foreground hover:border-primary/50 transition backdrop-blur-md"
+            >
+              <span className={depositMethod ? 'font-bold' : 'text-muted-foreground'}>
+                {depositMethod ? depositMethod.name : 'Choose payment method...'}
+              </span>
+              <ChevronDown className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+            </button>
+            {depositDropdown && (
+              <div className="absolute top-full left-0 right-0 mt-2 bg-background/90 backdrop-blur-xl border border-border/50 rounded-xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.3)] z-30 overflow-hidden">
+                {enabledMethods.filter(m => m.adminAddress).map((m, i) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => { setDepositMethod(m); setDepositDropdown(false); }}
+                    className={`w-full text-left px-4 py-3.5 text-sm hover:bg-primary/20 transition ${
+                      depositMethod?.id === m.id ? 'bg-primary/10 text-primary font-semibold' : 'text-foreground'
+                    } ${i > 0 ? 'border-t border-border/50' : ''}`}
+                  >
+                    {m.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Admin Address Display */}
+          {depositMethod && depositMethod.adminAddress && (
+            <div className="rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/30 p-4 space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-widest text-emerald-600 dark:text-emerald-400">Send {depositMethod.name} payment to:</p>
+              <div className="flex items-center gap-3">
+                <p className="flex-1 text-base sm:text-lg font-mono font-bold text-foreground break-all">{depositMethod.adminAddress}</p>
+                <button
+                  onClick={() => handleCopyDeposit(depositMethod.adminAddress!)}
+                  className="flex-shrink-0 p-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/50 hover:bg-emerald-200 dark:hover:bg-emerald-900 transition text-emerald-600 dark:text-emerald-400"
+                  title="Copy address"
+                >
+                  {depositCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                </button>
+              </div>
+              <p className="text-[11px] text-muted-foreground">After sending, contact admin with your transaction details to get your balance topped up.</p>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Wallet Setup */}
       <div className="glass-panel border border-border/50 rounded-3xl p-6 sm:p-8 relative z-10">
         <div className="flex items-center gap-2.5 mb-6">
@@ -176,19 +253,58 @@ export function PaymentPage({ userId, walletBalance, currency, paymentNetwork, m
         {loadingWallets ? (
           <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
         ) : (
-          <div className="space-y-3">
-            {enabledMethods.map(m => (
-              <div key={m.id}>
-                <label className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-1 block">{m.name}</label>
+          <div className="space-y-4">
+            <p className="text-xs text-muted-foreground">Select a payment method and enter your receiving address/number below.</p>
+            
+            {/* Method Select */}
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-1.5 block">Select Method</label>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setSetupDropdownOpen(!setupDropdownOpen)}
+                  className="w-full flex items-center justify-between px-4 py-3.5 rounded-xl border border-border/50 bg-background/50 text-sm text-foreground hover:border-primary/50 transition backdrop-blur-md"
+                >
+                  <span className={setupMethodId ? 'font-bold' : 'text-muted-foreground'}>
+                    {setupMethodId ? enabledMethods.find(m => m.id === setupMethodId)?.name : 'Choose a method...'}
+                  </span>
+                  <ChevronDown className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                </button>
+                {setupDropdownOpen && (
+                  <div className="absolute top-full left-0 right-0 mt-2 bg-background/90 backdrop-blur-xl border border-border/50 rounded-xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.3)] z-30 overflow-hidden">
+                    {enabledMethods.map((m, i) => (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => { setSetupMethodId(m.id); setSetupDropdownOpen(false); }}
+                        className={`w-full text-left px-4 py-3.5 text-sm hover:bg-primary/20 transition ${
+                          setupMethodId === m.id ? 'bg-primary/10 text-primary font-semibold' : 'text-foreground'
+                        } ${i > 0 ? 'border-t border-border/50' : ''}`}
+                      >
+                        {m.name}
+                        {wallets[m.id] && <span className="text-[10px] ml-2 text-emerald-600 font-bold">(Saved)</span>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Address Input */}
+            {setupMethodId && (
+              <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+                <label className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-1.5 block">
+                  {enabledMethods.find(m => m.id === setupMethodId)?.name} Address / Number
+                </label>
                 <input
-                  type={m.fieldType === 'number' ? 'tel' : 'text'}
-                  value={wallets[m.id] || ''}
-                  onChange={(e) => setWallets(prev => ({ ...prev, [m.id]: e.target.value }))}
-                  placeholder={m.placeholder}
+                  type={enabledMethods.find(m => m.id === setupMethodId)?.fieldType === 'number' ? 'tel' : 'text'}
+                  value={wallets[setupMethodId] || ''}
+                  onChange={(e) => setWallets(prev => ({ ...prev, [setupMethodId]: e.target.value }))}
+                  placeholder={enabledMethods.find(m => m.id === setupMethodId)?.placeholder}
                   className="w-full px-4 py-3 rounded-xl border border-border/50 bg-background/50 text-sm font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition backdrop-blur-md"
                 />
               </div>
-            ))}
+            )}
 
             {walletSaveMsg && (
               <div className={`flex items-center gap-1.5 ${walletSaveMsg.includes('success') ? 'text-emerald-600' : 'text-red-500'}`}>
@@ -199,11 +315,11 @@ export function PaymentPage({ userId, walletBalance, currency, paymentNetwork, m
 
             <button
               onClick={handleSaveWallets}
-              disabled={savingWallets}
+              disabled={savingWallets || !setupMethodId}
               className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-secondary text-secondary-foreground hover:bg-secondary/80 font-bold text-sm transition-all disabled:opacity-50 mt-2"
             >
               {savingWallets ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              {savingWallets ? 'Saving...' : 'Save Wallets'}
+              {savingWallets ? 'Saving...' : 'Save Wallet'}
             </button>
           </div>
         )}
@@ -230,7 +346,7 @@ export function PaymentPage({ userId, walletBalance, currency, paymentNetwork, m
               <div className="relative">
                 <button
                   type="button"
-                  onClick={() => setShowDropdown(!showDropdown)}
+                  onClick={() => setWithdrawalDropdownOpen(!withdrawalDropdownOpen)}
                   className="w-full flex items-center justify-between px-4 py-3.5 rounded-xl border border-border/50 bg-background/50 text-sm text-foreground hover:border-primary/50 transition backdrop-blur-md"
                 >
                   <span className={selectedWalletInfo ? 'font-bold truncate' : 'text-muted-foreground'}>
@@ -238,15 +354,15 @@ export function PaymentPage({ userId, walletBalance, currency, paymentNetwork, m
                   </span>
                   <ChevronDown className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                 </button>
-                {showDropdown && (
+                {withdrawalDropdownOpen && (
                   <div className="absolute top-full left-0 right-0 mt-2 bg-background/90 backdrop-blur-xl border border-border/50 rounded-xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.3)] z-30 overflow-hidden">
                     {availableWallets.map((m, i) => (
                       <button
                         key={m.id}
                         type="button"
-                        onClick={() => { setSelectedWallet(m.id); setShowDropdown(false); setError(null); }}
+                        onClick={() => { setWithdrawalMethodId(m.id); setWithdrawalDropdownOpen(false); setError(null); }}
                         className={`w-full text-left px-4 py-3.5 text-sm hover:bg-primary/20 transition ${
-                          selectedWallet === m.id ? 'bg-primary/10 text-primary font-semibold' : 'text-foreground'
+                          withdrawalMethodId === m.id ? 'bg-primary/10 text-primary font-semibold' : 'text-foreground'
                         } ${i > 0 ? 'border-t border-border/50' : ''}`}
                       >
                         <span className="font-medium">{m.name}</span>

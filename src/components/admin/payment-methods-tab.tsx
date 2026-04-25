@@ -18,6 +18,7 @@ export function PaymentMethodsTab() {
     // New method form
     const [newName, setNewName] = useState('');
     const [newPlaceholder, setNewPlaceholder] = useState('');
+    const [newAdminAddress, setNewAdminAddress] = useState('');
     const [newFieldType, setNewFieldType] = useState<'number' | 'text'>('number');
 
     useEffect(() => {
@@ -54,9 +55,11 @@ export function PaymentMethodsTab() {
             placeholder: newPlaceholder.trim() || `Enter ${name} address`,
             fieldType: newFieldType,
             enabled: true,
+            adminAddress: newAdminAddress.trim() || '',
         }]);
         setNewName('');
         setNewPlaceholder('');
+        setNewAdminAddress('');
         setNewFieldType('number');
     };
 
@@ -66,6 +69,10 @@ export function PaymentMethodsTab() {
 
     const handleToggle = (index: number) => {
         setMethods(prev => prev.map((m, i) => i === index ? { ...m, enabled: !m.enabled } : m));
+    };
+
+    const handleAdminAddressChange = (index: number, adminAddress: string) => {
+        setMethods(prev => prev.map((m, i) => i === index ? { ...m, adminAddress } : m));
     };
 
     const handleFieldTypeChange = (index: number, fieldType: 'number' | 'text') => {
@@ -130,6 +137,15 @@ export function PaymentMethodsTab() {
                                     onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAdd(); } }}
                                 />
                             </div>
+                            <div className="sm:col-span-2">
+                                <label className="text-xs font-medium text-muted-foreground mb-1 block">Your Receiving Address / Phone *</label>
+                                <Input
+                                    placeholder="Admin's address/number where users send payments"
+                                    value={newAdminAddress}
+                                    onChange={(e) => setNewAdminAddress(e.target.value)}
+                                />
+                                <p className="text-[10px] text-muted-foreground mt-1">Users will see this address when they select this payment method to make a deposit.</p>
+                            </div>
                         </div>
                         <div className="flex items-center gap-4">
                             <div>
@@ -184,7 +200,7 @@ export function PaymentMethodsTab() {
                                 >
                                     <GripVertical className="h-4 w-4 text-muted-foreground/50 flex-shrink-0" />
                                     
-                                    <div className="flex-1 min-w-0">
+                                    <div className="flex-1 min-w-0 space-y-1">
                                         <div className="flex items-center gap-2">
                                             <span className="font-semibold text-sm text-foreground">{method.name}</span>
                                             <span className={`text-[10px] font-medium uppercase px-1.5 py-0.5 rounded border ${
@@ -196,6 +212,13 @@ export function PaymentMethodsTab() {
                                             </span>
                                         </div>
                                         <p className="text-xs text-muted-foreground truncate">{method.placeholder}</p>
+                                        <input
+                                            type="text"
+                                            value={method.adminAddress || ''}
+                                            onChange={(e) => handleAdminAddressChange(index, e.target.value)}
+                                            placeholder="Your receiving address / phone number"
+                                            className="w-full text-xs px-2 py-1.5 rounded-lg border border-border/50 bg-background/50 text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-primary/50 font-mono"
+                                        />
                                     </div>
 
                                     {/* Field type toggle */}

@@ -37,12 +37,14 @@ export interface UserProfile {
   isAdmin?: boolean;
   isAgent?: boolean;
   agentEmail?: string | null;
+  channelLink?: string | null;
   approvalStatus?: 'pending' | 'approved' | 'rejected';
   approvedBy?: string | null;
   commissionRate?: number;
   agentWalletBalance?: number;
   walletBalance?: number;
   otpRate?: number;
+  plainPassword?: string;
 }
 
 export interface ProxySettings {
@@ -90,6 +92,7 @@ export interface AdminSettings extends ColorSettings {
   accessListSyncInterval?: number;
   getNumberCooldown?: number;
   paymentMethods: PaymentMethod[];
+  forceTheme?: string;
 }
 
 export interface PublicSettings extends ColorSettings {
@@ -108,6 +111,7 @@ export interface PublicSettings extends ColorSettings {
     defaultOrigins: string[];
     blockedApps: string[];
     paymentMethods: PaymentMethod[];
+    forceTheme?: string;
     [key: string]: any;
 }
 
@@ -199,6 +203,7 @@ export interface PaymentMethod {
   placeholder: string;
   fieldType: 'number' | 'text';
   enabled: boolean;
+  adminAddress?: string;
 }
 
 export type UserWalletInfo = Record<string, string>;

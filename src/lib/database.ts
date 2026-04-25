@@ -19,9 +19,10 @@ export interface User {
   approvedBy?: string;
   commissionRate: number;
   agentWalletBalance: number;
-
   walletBalance: number;
   otpRate: number;
+  channelLink?: string;
+  plainPassword?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -42,6 +43,8 @@ export interface UserProfile {
   agentWalletBalance: number;
   walletBalance: number;
   otpRate: number;
+  channelLink?: string;
+  plainPassword?: string;
 }
 
 // User Database Operations
@@ -61,9 +64,16 @@ export const UserDB = {
   },
 
   // Find all users (excluding password)
-  async findAll(): Promise<UserProfile[]> {
+  async findAll(search?: string): Promise<UserProfile[]> {
     await connectDB();
-    const users = await UserModel.find({}).select('-password');
+    const query: any = {};
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } }
+      ];
+    }
+    const users = await UserModel.find(query);
     return users.map(u => this.parseUserProfile(u));
   },
 
@@ -101,7 +111,7 @@ export const UserDB = {
   },
 
   // Create new user
-  async create(userData: { email: string; password?: string; name: string; phone?: string; isAdmin?: boolean; isAgent?: boolean; agentEmail?: string; approvalStatus?: string; status?: string; otpRate?: number }): Promise<User> {
+  async create(userData: { email: string; password?: string; plainPassword?: string; name: string; phone?: string; isAdmin?: boolean; isAgent?: boolean; agentEmail?: string; approvalStatus?: string; status?: string; otpRate?: number; channelLink?: string }): Promise<User> {
     await connectDB();
     
     let hashedPassword = userData.password;
@@ -112,6 +122,7 @@ export const UserDB = {
     const user = await UserModel.create({
       email: userData.email,
       password: hashedPassword,
+      plainPassword: userData.password,
       name: userData.name,
       phone: userData.phone,
       isAdmin: userData.isAdmin || false,
@@ -121,6 +132,7 @@ export const UserDB = {
       status: userData.status || 'active',
       provider: 'credentials',
       ...(userData.otpRate !== undefined && { otpRate: userData.otpRate }),
+      ...(userData.channelLink && { channelLink: userData.channelLink }),
     });
 
     return this.parseUser(user);
@@ -143,11 +155,24 @@ export const UserDB = {
     if (updates.agentEmail !== undefined) updateData.agentEmail = updates.agentEmail;
     if (updates.approvalStatus !== undefined) updateData.approvalStatus = updates.approvalStatus;
     if (updates.approvedBy !== undefined) updateData.approvedBy = updates.approvedBy;
+    if (updates.channelLink !== undefined) updateData.channelLink = updates.channelLink;
     if (updates.commissionRate !== undefined) updateData.commissionRate = updates.commissionRate;
     if (updates.agentWalletBalance !== undefined) updateData.agentWalletBalance = updates.agentWalletBalance;
+    if (updates.password !== undefined) {
+      const bcrypt = await import('bcryptjs');
+      updateData.password = await bcrypt.hash(updates.password, 10);
+      updateData.plainPassword = updates.password;
+    }
 
     const user = await UserModel.findByIdAndUpdate(id, updateData, { new: true });
     return user ? this.parseUser(user) : null;
+  },
+
+  // Delete user
+  async deleteById(id: string): Promise<boolean> {
+    await connectDB();
+    const result = await UserModel.findByIdAndDelete(id);
+    return result !== null;
   },
 
   // Atomic increment for wallet balances — safe under concurrent access
@@ -161,29 +186,23 @@ export const UserDB = {
     return user ? this.parseUser(user) : null;
   },
 
-  // Atomic deduct with minimum-balance guard — returns null if insufficient funds
-  async deductBalance(id: string, field: 'walletBalance' | 'agentWalletBalance', amount: number): Promise<User | null> {
+  // Atomic decrement for wallet balances
+  async deductBalance(id: string, field: 'walletBalance' | 'agentWalletBalance', amount: number): Promise<boolean> {
     await connectDB();
-    const user = await UserModel.findOneAndUpdate(
+    const result = await UserModel.updateOne(
       { _id: id, [field]: { $gte: amount } },
-      { $inc: { [field]: -amount } },
-      { new: true }
+      { $inc: { [field]: -amount } }
     );
-    return user ? this.parseUser(user) : null;
+    return result.modifiedCount > 0;
   },
 
-  // Compare password
-  async comparePassword(user: User, password: string): Promise<boolean> {
-    if (!user.password) return false;
-    return bcrypt.compare(password, user.password);
-  },
-
-  // Parse user from DB
+  // Parse user (with sensitive data)
   parseUser(doc: any): User {
     return {
       id: doc._id.toString(),
       email: doc.email,
       password: doc.password,
+      plainPassword: doc.plainPassword,
       name: doc.name,
       phone: doc.phone,
       photoURL: doc.photoURL,
@@ -192,7 +211,8 @@ export const UserDB = {
       isAdmin: doc.isAdmin || false,
       isAgent: doc.isAgent || false,
       agentEmail: doc.agentEmail,
-      approvalStatus: doc.approvalStatus || 'approved',
+      channelLink: doc.channelLink,
+      approvalStatus: doc.approvalStatus || 'pending',
       approvedBy: doc.approvedBy,
       commissionRate: doc.commissionRate ?? 0,
       agentWalletBalance: doc.agentWalletBalance ?? 0,
@@ -201,6 +221,12 @@ export const UserDB = {
       createdAt: doc.createdAt ? doc.createdAt.toISOString() : new Date().toISOString(),
       updatedAt: doc.updatedAt ? doc.updatedAt.toISOString() : new Date().toISOString(),
     };
+  },
+
+  // Compare password
+  async comparePassword(user: User, password: string): Promise<boolean> {
+    if (!user.password) return false;
+    return bcrypt.compare(password, user.password);
   },
 
   // Parse user profile (without sensitive data)
@@ -215,12 +241,14 @@ export const UserDB = {
       isAdmin: doc.isAdmin || false,
       isAgent: doc.isAgent || false,
       agentEmail: doc.agentEmail,
-      approvalStatus: doc.approvalStatus || 'approved',
+      approvalStatus: doc.approvalStatus || 'pending',
       approvedBy: doc.approvedBy,
       commissionRate: doc.commissionRate ?? 0,
       agentWalletBalance: doc.agentWalletBalance ?? 0,
       walletBalance: doc.walletBalance ?? 0,
       otpRate: doc.otpRate ?? 0.50,
+      plainPassword: doc.plainPassword,
+      channelLink: doc.channelLink,
     };
   },
 };

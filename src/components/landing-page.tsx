@@ -1,8 +1,14 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Globe, BarChart, ShieldCheck, ArrowRight, Code, MessageSquare, DollarSign } from 'lucide-react';
+import { Globe, BarChart, ShieldCheck, ArrowRight, Code, MessageSquare, DollarSign, Menu } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface LandingPageProps {
   siteName: string;
@@ -18,11 +24,11 @@ export function LandingPage({ siteName, signupEnabled, footerText, siteVersion }
     .replace('{VERSION}', siteVersion || '');
 
   return (
-    <div className="flex flex-col min-h-dvh bg-background text-foreground">
+    <div className="flex flex-col min-h-dvh bg-background text-foreground overflow-x-hidden">
       <header className="fixed top-4 left-4 right-4 z-50 glass-panel rounded-full max-w-7xl mx-auto shadow-lg border border-border/50 dark:border-white/10">
         <div className="flex h-16 items-center justify-between px-6 md:px-8">
-          <Link href="/" className="flex items-center gap-2">
-            <span className="text-xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-primary to-secondary tracking-wide">{siteName}</span>
+          <Link href="/" className="flex items-center gap-2 min-w-0">
+            <span className="text-lg md:text-xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-primary to-secondary tracking-wide truncate">{siteName}</span>
           </Link>
           <nav className="hidden items-center gap-4 text-sm font-medium md:flex">
              <ThemeToggle />
@@ -35,16 +41,25 @@ export function LandingPage({ siteName, signupEnabled, footerText, siteVersion }
                 </Link>
             )}
           </nav>
-          <div className="flex items-center gap-3 md:hidden">
-             <ThemeToggle />
-             <Link href="/login">
-                <Button variant="outline" size="sm">Login</Button>
-            </Link>
-            {signupEnabled && (
-                <Link href="/signup">
-                    <Button size="sm">Sign Up</Button>
-                </Link>
-            )}
+          <div className="flex items-center gap-2 md:hidden flex-shrink-0">
+            <ThemeToggle />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon">
+                  <Menu className="h-5 w-5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem asChild>
+                  <Link href="/login" className="w-full cursor-pointer">Login</Link>
+                </DropdownMenuItem>
+                {signupEnabled && (
+                  <DropdownMenuItem asChild>
+                    <Link href="/signup" className="w-full cursor-pointer">Sign Up</Link>
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </header>
@@ -54,10 +69,10 @@ export function LandingPage({ siteName, signupEnabled, footerText, siteVersion }
         <section className="container mx-auto px-4 md:px-6 py-20 md:py-32 text-center relative">
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-primary/20 rounded-full blur-[100px] pointer-events-none" />
           <div className="max-w-4xl mx-auto relative z-10">
-            <h1 className="text-5xl md:text-7xl font-extrabold tracking-tighter mb-6 text-transparent bg-clip-text bg-gradient-to-br from-foreground to-foreground/60 neon-text-glow leading-tight">
+            <h1 className="text-4xl sm:text-5xl md:text-7xl font-extrabold tracking-tighter mb-6 text-transparent bg-clip-text bg-gradient-to-br from-foreground to-foreground/60 neon-text-glow leading-tight px-2">
               Monetize Your OTP Traffic with <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-secondary">Global IPRN</span>
             </h1>
-            <p className="text-lg md:text-xl text-muted-foreground/80 mb-10 max-w-2xl mx-auto">
+            <p className="text-base sm:text-lg md:text-xl text-muted-foreground/80 mb-10 max-w-2xl mx-auto px-4">
               Leverage our robust network of International Premium Rate Numbers to deliver OTPs and generate revenue from every message you send.
             </p>
             <div className="flex flex-col sm:flex-row justify-center items-center gap-4">
