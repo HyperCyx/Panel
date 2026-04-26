@@ -56,52 +56,10 @@ export async function syncAccessListFromApi() {
         if (!apiKey) return;
 
         const API_URL = 'https://api.iprn-elite.com/v1.0/csv';
-        const body = {
-            id: null,
-            jsonrpc: '2.0',
-            method: 'sms.access_list__get_list:account_price',
-            params: {
-                filter: {
-                    cur_key: 1,
-                    sp_key_list: null
-                },
-                page: 1,
-                per_page: 5000, // Very large number to capture all origins
-            },
-        };
+        const PER_PAGE = 1000;
+        const MAX_PAGES = 200;
 
         const dispatcher = await getProxyDispatcher();
-        let csvText = '';
-
-        if (dispatcher) {
-            const { fetch: undiciFetch } = await import('undici');
-            const response = await undiciFetch(API_URL, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Api-Key': apiKey,
-                },
-                body: JSON.stringify(body),
-                dispatcher,
-            });
-            if (!response.ok) throw new Error('API failed');
-            csvText = await response.text();
-        } else {
-            const response = await fetch(API_URL, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Api-Key': apiKey,
-                },
-                body: JSON.stringify(body),
-            });
-            if (!response.ok) throw new Error('API failed');
-            csvText = await response.text();
-        }
-
-        if (!csvText || csvText.trim() === '' || csvText.trim().startsWith('{')) {
-            return; // Error or empty response
-        }
 
         const parseCsvWithQuotes = (input: string): string[][] => {
             const rows: string[][] = [];
@@ -151,44 +109,87 @@ export async function syncAccessListFromApi() {
             return rows.filter(r => r.length > 1 || (r.length === 1 && r[0]));
         };
 
-        const allRows = parseCsvWithQuotes(csvText);
-        if (allRows.length < 2) return;
-
-        const headers = allRows[0].map(h => h.trim().toLowerCase());
-        const dataRows = allRows.slice(1);
         const records: AccessListRecordInfo[] = [];
+        for (let page = 1; page <= MAX_PAGES; page++) {
+            const body = {
+                id: null,
+                jsonrpc: '2.0',
+                method: 'sms.access_list__get_list:account_price',
+                params: {
+                    filter: {
+                        cur_key: 1,
+                        sp_key_list: null
+                    },
+                    page,
+                    per_page: PER_PAGE,
+                },
+            };
 
-        const columnMap = {
-            price: headers.indexOf('price'),
-            accessOrigin: headers.indexOf('access origin'),
-            accessDestination: headers.indexOf('access destination'),
-            testNumber: headers.indexOf('test number'),
-            rate: headers.indexOf('rate'),
-            currency: headers.indexOf('currency'),
-            comment: headers.indexOf('comment'),
-            message: headers.indexOf('message'),
-            limitHour: headers.indexOf('limit hour'),
-            limitDay: headers.indexOf('limit day'),
-            datetime: headers.indexOf('datetime'),
-        };
+            const response = dispatcher
+                ? await (await import('undici')).fetch(API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Api-Key': apiKey,
+                    },
+                    body: JSON.stringify(body),
+                    dispatcher,
+                })
+                : await fetch(API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Api-Key': apiKey,
+                    },
+                    body: JSON.stringify(body),
+                });
 
-        if (columnMap.accessOrigin === -1) return;
+            if (!response.ok) throw new Error(`API failed at page ${page}`);
+            const csvText = await response.text();
+            if (!csvText || csvText.trim() === '' || csvText.trim().startsWith('{')) break;
 
-        for (const parts of dataRows) {
-            records.push({
-                price: parts[columnMap.price] || '',
-                accessOrigin: parts[columnMap.accessOrigin] || '',
-                accessDestination: parts[columnMap.accessDestination] || '',
-                testNumber: parts[columnMap.testNumber] || '',
-                rate: parts[columnMap.rate] || '',
-                currency: parts[columnMap.currency] || '',
-                comment: parts[columnMap.comment] || '',
-                message: parts[columnMap.message] || '',
-                limitHour: parts[columnMap.limitHour] || '',
-                limitDay: parts[columnMap.limitDay] || '',
-                datetime: parts[columnMap.datetime] || '',
-            });
+            const allRows = parseCsvWithQuotes(csvText);
+            if (allRows.length < 2) break;
+
+            const headers = allRows[0].map(h => h.trim().toLowerCase());
+            const dataRows = allRows.slice(1);
+
+            const columnMap = {
+                price: headers.indexOf('price'),
+                accessOrigin: headers.indexOf('access origin'),
+                accessDestination: headers.indexOf('access destination'),
+                testNumber: headers.indexOf('test number'),
+                rate: headers.indexOf('rate'),
+                currency: headers.indexOf('currency'),
+                comment: headers.indexOf('comment'),
+                message: headers.indexOf('message'),
+                limitHour: headers.indexOf('limit hour'),
+                limitDay: headers.indexOf('limit day'),
+                datetime: headers.indexOf('datetime'),
+            };
+
+            if (columnMap.accessOrigin === -1) break;
+
+            for (const parts of dataRows) {
+                records.push({
+                    price: parts[columnMap.price] || '',
+                    accessOrigin: parts[columnMap.accessOrigin] || '',
+                    accessDestination: parts[columnMap.accessDestination] || '',
+                    testNumber: parts[columnMap.testNumber] || '',
+                    rate: parts[columnMap.rate] || '',
+                    currency: parts[columnMap.currency] || '',
+                    comment: parts[columnMap.comment] || '',
+                    message: parts[columnMap.message] || '',
+                    limitHour: parts[columnMap.limitHour] || '',
+                    limitDay: parts[columnMap.limitDay] || '',
+                    datetime: parts[columnMap.datetime] || '',
+                });
+            }
+
+            if (dataRows.length < PER_PAGE) break;
         }
+
+        if (records.length === 0) return;
 
         // Wipe old DB and insert new
         await AccessListDB.bulkReplace(records);

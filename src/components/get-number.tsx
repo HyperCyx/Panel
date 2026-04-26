@@ -256,6 +256,35 @@ export function GetNumber({ userId, currency = '৳', otpRate = 0.50, otpCheckIn
     return 'pending';
   };
 
+  // User earnings are credited once per allocated number when first OTP is received.
+  const getReceivedAmountForRecord = (rec: AllocatedNumberInfo, status: 'pending' | 'success' | 'expired') => {
+    const hasOtp = (rec.otpList && rec.otpList.length > 0) || !!rec.otp;
+    if (!hasOtp || status !== 'success') return 0;
+    return otpRate;
+  };
+
+  const isValidOtpCode = (value?: string) => {
+    if (!value) return false;
+    return /^[A-Za-z0-9]{3,10}$/.test(value.trim());
+  };
+
+  const getDisplayOtpList = (rec: AllocatedNumberInfo) => {
+    const source = rec.otpList || [];
+    const seen = new Set<string>();
+    const unique: { otp: string; sms: string; receivedAt: string }[] = [];
+
+    for (const item of source) {
+      const normalized = (item.otp || '').trim();
+      if (!isValidOtpCode(normalized)) continue;
+      const key = normalized.toUpperCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      unique.push({ ...item, otp: normalized });
+    }
+
+    return unique;
+  };
+
   const filteredRecords = records.filter(r => {
     if (recordFilter !== 'all' && getEffectiveStatus(r) !== recordFilter) return false;
     
@@ -434,6 +463,8 @@ export function GetNumber({ userId, currency = '৳', otpRate = 0.50, otpCheckIn
             paginatedRecords.map((rec) => {
               const effectiveStatus = getEffectiveStatus(rec);
               const displayNumber = rec.number;
+              const receivedAmount = getReceivedAmountForRecord(rec, effectiveStatus);
+              const displayOtpList = getDisplayOtpList(rec);
 
               const borderColor =
                 effectiveStatus === 'success'
@@ -487,9 +518,12 @@ export function GetNumber({ userId, currency = '৳', otpRate = 0.50, otpCheckIn
                     </div>
 
                     {/* OTP Codes — show all from otpList */}
-                    {rec.otpList && rec.otpList.length > 0 ? (
+                    {displayOtpList.length > 0 ? (
                       <div className="mt-2 space-y-1.5">
-                        {rec.otpList.map((item, idx) => (
+                        <p className="text-[11px] font-semibold text-emerald-700">
+                          Received: {currency} {receivedAmount.toFixed(2)}
+                        </p>
+                        {displayOtpList.map((item, idx) => (
                           <div key={idx}>
                             <div className="flex items-center gap-2">
                               <button
@@ -505,27 +539,14 @@ export function GetNumber({ userId, currency = '৳', otpRate = 0.50, otpCheckIn
                                 {new Date(item.receivedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'UTC' })}
                               </span>
                             </div>
-                            {item.sms && (
-                              <div className="flex items-center gap-1.5 mt-0.5 pl-1">
-                                <p className="text-[10px] text-muted-foreground line-clamp-1 flex-1 min-w-0">
-                                  {item.sms}
-                                </p>
-                                <button
-                                  onClick={() => handleCopy(item.sms)}
-                                  className={`p-1 rounded transition-all flex-shrink-0 ${
-                                    copied === item.sms ? 'text-emerald-600' : 'text-muted-foreground hover:text-primary'
-                                  }`}
-                                  title="Copy full message"
-                                >
-                                  {copied === item.sms ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-                                </button>
-                              </div>
-                            )}
                           </div>
                         ))}
                       </div>
-                    ) : rec.otp ? (
+                    ) : rec.otp && isValidOtpCode(rec.otp) ? (
                       <div className="mt-2">
+                        <p className="text-[11px] font-semibold text-emerald-700 mb-1.5">
+                          Received: {currency} {receivedAmount.toFixed(2)}
+                        </p>
                         <button
                           onClick={() => handleCopy(rec.otp!)}
                           className="inline-flex items-center gap-2 rounded-lg bg-primary/10 px-3 py-1.5 text-primary transition-colors hover:bg-primary/20 active:bg-primary/30"
@@ -538,41 +559,6 @@ export function GetNumber({ userId, currency = '৳', otpRate = 0.50, otpCheckIn
                       </div>
                     ) : null}
 
-                    {/* Bottom row: Country/Operator | Allocated Time */}
-                    <div className="flex items-center justify-between mt-2 gap-2">
-                      <div className="min-w-0">
-                        <p className="text-xs font-medium text-foreground sm:hidden truncate">
-                          {(rec.country || '—').split(' - ')[0]}
-                        </p>
-                        <p className="hidden sm:block text-xs font-medium text-foreground truncate">{rec.country || '—'}</p>
-                        <p className="text-[10px] text-muted-foreground truncate">{rec.operator || '—'}</p>
-                      </div>
-                      <p className="text-[10px] text-muted-foreground whitespace-nowrap flex-shrink-0">
-                        {new Date(rec.allocatedAt).toLocaleString('en-US', {
-                          month: 'short', day: 'numeric',
-                          hour: '2-digit', minute: '2-digit',
-                          timeZone: 'UTC',
-                        })}
-                      </p>
-                    </div>
-
-                    {/* SMS text — only show if no otpList (legacy fallback) */}
-                    {rec.sms && (!rec.otpList || rec.otpList.length === 0) && (
-                      <div className="flex items-center gap-1.5 mt-1.5">
-                        <p className="text-[10px] text-muted-foreground line-clamp-1 flex-1 min-w-0">
-                          {rec.sms}
-                        </p>
-                        <button
-                          onClick={() => handleCopy(rec.sms!)}
-                          className={`p-1 rounded transition-all flex-shrink-0 ${
-                            copied === rec.sms ? 'text-emerald-600' : 'text-muted-foreground hover:text-primary'
-                          }`}
-                          title="Copy full message"
-                        >
-                          {copied === rec.sms ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-                        </button>
-                      </div>
-                    )}
                   </div>
                 </div>
               );

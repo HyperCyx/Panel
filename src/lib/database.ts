@@ -379,7 +379,13 @@ export const AllocatedNumberDB = {
   async updateOtp(id: string, userId: string, otp: string, sms: string): Promise<AllocatedNumberRecord | null> {
     await connectDB();
     const doc = await AllocatedNumberModel.findOneAndUpdate(
-      { _id: id, userId, status: 'pending' },
+      {
+        _id: id,
+        userId,
+        status: 'pending',
+        'otpList.sms': { $ne: sms },
+        'otpList.otp': { $ne: otp },
+      },
       { $set: { otp, sms, status: 'success' }, $push: { otpList: { otp, sms, receivedAt: new Date() } } },
       { new: true }
     );
@@ -389,7 +395,13 @@ export const AllocatedNumberDB = {
   async appendOtp(id: string, userId: string, otp: string, sms: string): Promise<AllocatedNumberRecord | null> {
     await connectDB();
     const doc = await AllocatedNumberModel.findOneAndUpdate(
-      { _id: id, userId, status: 'success' },
+      {
+        _id: id,
+        userId,
+        status: 'success',
+        'otpList.sms': { $ne: sms },
+        'otpList.otp': { $ne: otp },
+      },
       { $set: { otp, sms }, $push: { otpList: { otp, sms, receivedAt: new Date() } } },
       { new: true }
     );
@@ -684,8 +696,11 @@ export class AccessListDB {
             params.message = `%${filter.message}%`;
         }
 
-        sql += ' ORDER BY datetime DESC LIMIT @limit';
-        params.limit = filter.per_page && filter.per_page > 0 ? filter.per_page : 100;
+        sql += ' ORDER BY datetime DESC';
+        if (filter.per_page && filter.per_page > 0) {
+          sql += ' LIMIT @limit';
+          params.limit = filter.per_page;
+        }
 
         const stmt = db.prepare(sql);
         const docs = stmt.all(params) as any[];

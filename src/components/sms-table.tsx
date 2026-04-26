@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, Fragment } from 'react';
+import { useState } from 'react';
 import {
   Table,
   TableBody,
@@ -28,40 +28,9 @@ function maskPhone(phone: string): string {
   return clean.slice(0, -4) + 'XXXX';
 }
 
-const renderMessageWithLink = (message: string, link?: string) => {
-  if (!link || !message.includes(link)) {
-    return message;
-  }
-  const parts = message.split(link);
-  return (
-    <Fragment>
-      {parts.map((part, i) => (
-        <Fragment key={i}>
-          {part}
-          {i < parts.length - 1 && (
-            <a href={link} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-              {link}
-            </a>
-          )}
-        </Fragment>
-      ))}
-    </Fragment>
-  );
-};
-
-
 export function SmsTable({ records, isLoading }: SmsTableProps) {
   const { toast } = useToast();
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
-  const [expandedMsg, setExpandedMsg] = useState<Set<number>>(new Set());
-
-  const toggleMsg = useCallback((idx: number) => {
-    setExpandedMsg(prev => {
-      const next = new Set(prev);
-      if (next.has(idx)) next.delete(idx); else next.add(idx);
-      return next;
-    });
-  }, []);
 
   const handleCopyCode = (code: string) => {
     if (typeof navigator === 'undefined' || !navigator.clipboard) {
@@ -103,14 +72,12 @@ export function SmsTable({ records, isLoading }: SmsTableProps) {
                   <TableHead className="hidden md:table-cell">Sender ID</TableHead>
                   <TableHead>Phone</TableHead>
                   <TableHead>Range</TableHead>
-                  <TableHead>Rate</TableHead>
-                  <TableHead>Message</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {records.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                    <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
                       No messages to display. Please validate your API key and set filters.
                     </TableCell>
                   </TableRow>
@@ -134,23 +101,6 @@ export function SmsTable({ records, isLoading }: SmsTableProps) {
                           )}
                       </TableCell>
                       <TableCell className="align-top truncate text-sm">{record.range || '—'}</TableCell>
-                      <TableCell className="whitespace-nowrap align-top truncate">{`${record.rate} ${record.currency}`}</TableCell>
-                      <TableCell className="align-top">
-                        <div
-                          className="cursor-pointer select-none"
-                          onClick={() => toggleMsg(index)}
-                        >
-                          {expandedMsg.has(index) ? (
-                            <p className="whitespace-pre-wrap break-words text-sm max-w-xs">
-                              {renderMessageWithLink(record.message, record.extractedInfo?.link)}
-                            </p>
-                          ) : (
-                            <p className="text-sm max-w-xs truncate">
-                              {record.message.length > 40 ? record.message.slice(0, 40) + '…' : record.message}
-                            </p>
-                          )}
-                        </div>
-                      </TableCell>
                     </TableRow>
                   ))
                 )}
@@ -176,7 +126,6 @@ export function SmsTable({ records, isLoading }: SmsTableProps) {
                     <th className="pb-3 px-3 pt-3 text-[11px] font-bold uppercase tracking-widest text-muted-foreground whitespace-nowrap">Range</th>
                     <th className="pb-3 px-3 pt-3 text-[11px] font-bold uppercase tracking-widest text-muted-foreground whitespace-nowrap">Sender</th>
                     <th className="pb-3 px-3 pt-3 text-[11px] font-bold uppercase tracking-widest text-muted-foreground whitespace-nowrap">Time</th>
-                    <th className="pb-3 px-3 pt-3 text-[11px] font-bold uppercase tracking-widest text-muted-foreground whitespace-nowrap">Message</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -204,22 +153,6 @@ export function SmsTable({ records, isLoading }: SmsTableProps) {
                       </td>
                       <td className="py-3 px-3">
                         <p className="text-xs text-muted-foreground whitespace-nowrap">{record.dateTime}</p>
-                      </td>
-                      <td className="py-3 px-3">
-                        <div
-                          className="cursor-pointer select-none"
-                          onClick={() => toggleMsg(index)}
-                        >
-                          {expandedMsg.has(index) ? (
-                            <p className="text-xs text-muted-foreground whitespace-pre-wrap break-words max-w-[200px]">
-                              {renderMessageWithLink(record.message, record.extractedInfo?.link)}
-                            </p>
-                          ) : (
-                            <p className="text-xs text-muted-foreground max-w-[200px] truncate">
-                              {record.message.length > 30 ? record.message.slice(0, 30) + '…' : record.message}
-                            </p>
-                          )}
-                        </div>
                       </td>
                     </tr>
                   ))}

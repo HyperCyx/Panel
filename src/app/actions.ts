@@ -665,7 +665,7 @@ export const getPublicSettings = cache(async (): Promise<PublicSettings> => {
         minimumWithdrawal: 10,
         otpCheckInterval: 5,
         consoleRefreshInterval: 60,
-        defaultOrigins: ['Telegram', 'WhatsApp', 'Bitget', 'Binance', 'Google'],
+        defaultOrigins: [],
         blockedApps: [],
         paymentMethods: [],
         forceTheme: 'system',
@@ -807,7 +807,7 @@ export async function getAdminSettings(): Promise<Partial<AdminSettings> & { err
             paymentWalletAddress: settings.paymentWalletAddress ?? '',
             paymentNetwork: settings.paymentNetwork ?? 'TRC20',
             minimumWithdrawal: settings.minimumWithdrawal ?? 10,
-            defaultOrigins: settings.defaultOrigins ?? ['Telegram', 'WhatsApp', 'Bitget', 'Binance', 'Google'],
+            defaultOrigins: settings.defaultOrigins ?? [],
             blockedApps: settings.blockedApps ?? [],
             paymentMethods: settings.paymentMethods ?? [],
             defaultOtpRate: settings.defaultOtpRate ?? 0.50,
@@ -1194,11 +1194,16 @@ export async function checkNumberOtp(numberId: string): Promise<{ otp?: string; 
 
         // Extract OTP/confirmation code from the message
         const extracted = extractInfoWithoutAI(smsMessage);
-        const otp = extracted.confirmationCode || smsMessage.substring(0, 50);
+        const otp = extracted.confirmationCode;
+        // Ignore messages that do not contain an OTP code
+        if (!otp) {
+            return { status: record.status, otp: record.otp, sms: record.sms, otpList: record.otpList };
+        }
 
         // Check if this exact SMS is already stored (avoid duplicates)
         const alreadyStored = (record.otpList || []).some(item => item.sms === smsMessage);
-        if (alreadyStored) {
+        const alreadyStoredOtp = (record.otpList || []).some(item => item.otp === otp);
+        if (alreadyStored || alreadyStoredOtp) {
             return { status: record.status, otp: record.otp, sms: record.sms, otpList: record.otpList };
         }
 
